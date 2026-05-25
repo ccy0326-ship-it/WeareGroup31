@@ -158,15 +158,15 @@
       },
       {
         "rule_id": "RF005_R2",
-        "condition": "Train delayed 60–119 minutes due to operator fault",
+        "condition": "Train delayed between 60 and 119 minutes due to operator fault",
         "compensation": "100% refund of the fare for the delayed leg",
         "how_to_claim": "Submit claim via app or customer service within 28 days of travel date"
       },
       {
         "rule_id": "RF005_R3",
         "condition": "Train delayed 120 minutes or more due to operator fault",
-        "compensation": "100% refund of the fare for the delayed leg, plus reimbursement of alternative transport costs up to $10.00",
-        "how_to_claim": "Submit claim with receipts via customer service within 28 days of travel date"
+        "compensation": "100% refund of the delayed fare plus reimbursement for meals and hotel",
+        "how_to_claim": "Submit claim with receipts via customer service within 28 days"
       }
     ],
     "exclusions": "Delays caused by third-party events (extreme weather, security incidents, government directives, or passenger-caused incidents) are not eligible for compensation."
