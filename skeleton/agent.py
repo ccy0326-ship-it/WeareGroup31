@@ -784,30 +784,31 @@ JSON:"""
     answer = llm.chat(messages=final_messages, system_prompt=contextual_prompt)
 
     # Force delay compensation answer
-    if any(
-        kw in user_message.lower()
-        for kw in ["delay", "refund", "compensation"]
-    ):
 
-        if "120" in user_message:
+    numbers = re.findall(r'\d+', user_message)
+
+    if numbers:
+        minutes = int(numbers[0])
+
+        if minutes >= 120:
             answer = (
-                "If your train is delayed 120 minutes or more due to operator fault, "
+                f"If your train is delayed {minutes} minutes or more due to operator fault, "
                 "you receive a 100% refund of the delayed fare, plus reimbursement "
                 "for meals and hotel costs if eligible. "
                 "Submit a claim with receipts within 28 days."
             )
 
-        elif "90" in user_message:
+        elif minutes >= 60:
             answer = (
-                "If your train is delayed between 60 and 119 minutes due to operator fault, "
+                f"If your train is delayed {minutes} minutes due to operator fault, "
                 "you receive a 50% refund of the delayed fare."
             )
 
-        elif "30" in user_message:
+        else:
             answer = (
-                "No compensation is available for delays under 60 minutes."
+                f"No compensation is available for delays under 60 minutes "
+                f"(your delay: {minutes} minutes)."
             )
-
         # Update history
         updated_history = history + [
             {"role": "user", "content": user_message},
