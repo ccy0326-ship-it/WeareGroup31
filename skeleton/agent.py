@@ -784,38 +784,43 @@ JSON:"""
     answer = llm.chat(messages=final_messages, system_prompt=contextual_prompt)
 
     # Force delay compensation answer
+    if any(kw in user_message.lower() for kw in ["delay", "delayed", "refund", "compensation"]):
+        numbers = re.findall(r'\d+', user_message)
 
-    numbers = re.findall(r'\d+', user_message)
+        answer = (
+            "Yes, you may be eligible for compensation if your train is delayed. "
+            "Please provide the delay time in minutes so I can calculate whether it is "
+            "no compensation, 50% refund, or 100% refund."
+        )
 
-    if numbers:
-        minutes = int(numbers[0])
+        if numbers:
+            minutes = int(numbers[0])
 
-        if minutes >= 120:
-            answer = (
-                f"If your train is delayed {minutes} minutes or more due to operator fault, "
-                "you receive a 100% refund of the delayed fare, plus reimbursement "
-                "for meals and hotel costs if eligible. "
-                "Submit a claim with receipts within 28 days."
-            )
+            if minutes >= 120:
+                answer = (
+                    f"If your train is delayed {minutes} minutes or more due to operator fault, "
+                    "you receive a 100% refund of the delayed fare, plus reimbursement "
+                    "for meals and hotel costs if eligible. "
+                    "Submit a claim with receipts within 28 days."
+                )
+            elif minutes >= 60:
+                answer = (
+                    f"If your train is delayed {minutes} minutes due to operator fault, "
+                    "you receive a 50% refund of the delayed fare."
+                )
+            else:
+                answer = (
+                    f"No compensation is available for delays under 60 minutes "
+                    f"(your delay: {minutes} minutes)."
+                )
 
-        elif minutes >= 60:
-            answer = (
-                f"If your train is delayed {minutes} minutes due to operator fault, "
-                "you receive a 50% refund of the delayed fare."
-            )
+    # Update history
+    updated_history = history + [
+        {"role": "user", "content": user_message},
+        {"role": "assistant", "content": answer},
+    ]
 
-        else:
-            answer = (
-                f"No compensation is available for delays under 60 minutes "
-                f"(your delay: {minutes} minutes)."
-            )
-        # Update history
-        updated_history = history + [
-            {"role": "user", "content": user_message},
-            {"role": "assistant", "content": answer},
-        ]
+    if debug:
+        return answer, updated_history, "\n\n".join(debug_info)
 
-        if debug:
-                return answer, updated_history, "\n\n".join(debug_info)
-
-        return answer, updated_history
+    return answer, updated_history
