@@ -40,22 +40,35 @@ def seed():
         session.run("MATCH (n) DETACH DELETE n")
         print("  Cleared existing graph data")
 
-        # TODO: Design your node labels and create metro station nodes.
-        # Each station has: station_id, name, lines, and interchange info.
-        # See metro_stations.json for the full data structure.
+        # Create metro station nodes
+        for s in metro_stations:
+            session.run(
+                """
+                MERGE (m:MetroStation:Station {station_id: $station_id})
+                SET m.name = $name,
+                    m.lines = $lines
+                """,
+                station_id=s["station_id"],
+                name=s["name"],
+                lines=s["lines"],
+            )
 
-        # TODO: Design your node labels and create national rail station nodes.
-        # See national_rail_stations.json for the full data structure.
-
-        # TODO: Design your relationship types and create metro links.
-        # Each station lists its adjacent_stations with line and travel_time_min.
-        # Consider what properties to store on the relationship.
-
-        # TODO: Design your relationship types and create national rail links.
-
-        # TODO: Create interchange relationships between metro and rail stations.
-        # Interchange info is in the is_interchange_national_rail field
-        # of metro_stations.json.
+        # Create metro route relationships
+        for s in metro_stations:
+            for adj in s["adjacent_stations"]:
+                session.run(
+                    """
+                    MATCH (a:MetroStation {station_id: $from_id})
+                    MATCH (b:MetroStation {station_id: $to_id})
+                    MERGE (a)-[r:METRO_LINK]->(b)
+                    SET r.line = $line,
+                        r.travel_time_min = $travel_time_min
+                    """,
+                    from_id=s["station_id"],
+                    to_id=adj["station_id"],
+                    line=adj["line"],
+                    travel_time_min=adj["travel_time_min"],
+                )
 
     driver.close()
     print("\nNeo4j graph seeded successfully.")
