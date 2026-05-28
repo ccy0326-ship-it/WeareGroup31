@@ -116,6 +116,186 @@ CREATE TABLE IF NOT EXISTS metro_station_connections (
 
 );
 
+CREATE TABLE IF NOT EXISTS metro_travel_history (
+
+    trip_id VARCHAR(20) PRIMARY KEY,
+
+    user_id VARCHAR(10) NOT NULL,
+
+    schedule_id VARCHAR(20) NOT NULL,
+
+    origin_station_id VARCHAR(10) NOT NULL,
+
+    destination_station_id VARCHAR(10) NOT NULL,
+
+    travel_date DATE NOT NULL,
+
+    ticket_type VARCHAR(20),
+
+    day_pass_ref VARCHAR(20),
+
+    stops_travelled INT,
+
+    amount_usd DECIMAL(6,2),
+
+    status VARCHAR(20),
+
+    purchased_at TIMESTAMPTZ,
+
+    travelled_at TIMESTAMPTZ,
+
+    FOREIGN KEY (user_id)
+        REFERENCES registered_users(user_id)
+
+);
+
+
+CREATE TABLE IF NOT EXISTS national_rail_stations (
+
+    station_id VARCHAR(10) PRIMARY KEY,
+
+    name VARCHAR(100) NOT NULL,
+
+    is_interchange_national_rail BOOLEAN DEFAULT FALSE,
+
+    is_interchange_metro BOOLEAN DEFAULT FALSE,
+
+    interchange_metro_station_id VARCHAR(10)
+
+);
+
+CREATE TABLE IF NOT EXISTS national_rail_station_lines (
+
+    station_id VARCHAR(10) NOT NULL,
+
+    line VARCHAR(10) NOT NULL,
+
+    PRIMARY KEY (station_id, line),
+
+    FOREIGN KEY (station_id)
+        REFERENCES national_rail_stations(station_id)
+
+);
+
+CREATE TABLE IF NOT EXISTS national_rail_station_connections (
+
+    station_id VARCHAR(10) NOT NULL,
+
+    connected_station_id VARCHAR(10) NOT NULL,
+
+    line VARCHAR(10) NOT NULL,
+
+    travel_time_min INT NOT NULL,
+
+    PRIMARY KEY (station_id, connected_station_id, line),
+
+    FOREIGN KEY (station_id)
+        REFERENCES national_rail_stations(station_id),
+
+    FOREIGN KEY (connected_station_id)
+        REFERENCES national_rail_stations(station_id)
+
+);
+
+CREATE TABLE IF NOT EXISTS national_rail_schedules (
+
+    schedule_id VARCHAR(20) PRIMARY KEY,
+
+    line VARCHAR(10) NOT NULL,
+
+    service_type VARCHAR(20) NOT NULL,
+
+    direction VARCHAR(20) NOT NULL,
+
+    origin_station_id VARCHAR(10) NOT NULL,
+
+    destination_station_id VARCHAR(10) NOT NULL,
+
+    first_train_time TIME NOT NULL,
+
+    last_train_time TIME NOT NULL,
+
+    frequency_min INT NOT NULL,
+
+    FOREIGN KEY (origin_station_id)
+        REFERENCES national_rail_stations(station_id),
+
+    FOREIGN KEY (destination_station_id)
+        REFERENCES national_rail_stations(station_id)
+
+);
+
+CREATE TABLE IF NOT EXISTS national_rail_schedule_stops (
+
+    schedule_id VARCHAR(20) NOT NULL,
+
+    station_id VARCHAR(10) NOT NULL,
+
+    stop_order INT NOT NULL,
+
+    travel_time_from_origin_min INT NOT NULL,
+
+    is_passed_through BOOLEAN DEFAULT FALSE,
+
+    PRIMARY KEY (schedule_id, station_id),
+
+    FOREIGN KEY (schedule_id)
+        REFERENCES national_rail_schedules(schedule_id),
+
+    FOREIGN KEY (station_id)
+        REFERENCES national_rail_stations(station_id)
+
+);
+
+CREATE TABLE IF NOT EXISTS national_rail_fare_classes (
+
+    schedule_id VARCHAR(20) NOT NULL,
+
+    fare_class VARCHAR(20) NOT NULL,
+
+    base_fare_usd DECIMAL(6,2) NOT NULL,
+
+    per_stop_rate_usd DECIMAL(6,2) NOT NULL,
+
+    PRIMARY KEY (schedule_id, fare_class),
+
+    FOREIGN KEY (schedule_id)
+        REFERENCES national_rail_schedules(schedule_id)
+
+);
+
+CREATE TABLE IF NOT EXISTS national_rail_seat_layouts (
+
+    layout_id VARCHAR(20) PRIMARY KEY,
+
+    schedule_id VARCHAR(20) NOT NULL,
+
+    FOREIGN KEY (schedule_id)
+        REFERENCES national_rail_schedules(schedule_id)
+
+);
+
+CREATE TABLE IF NOT EXISTS national_rail_seats (
+
+    layout_id VARCHAR(20) NOT NULL,
+
+    coach VARCHAR(10) NOT NULL,
+
+    fare_class VARCHAR(20) NOT NULL,
+
+    seat_id VARCHAR(10) NOT NULL,
+
+    row_number INT NOT NULL,
+
+    column_letter VARCHAR(5) NOT NULL,
+
+    PRIMARY KEY (layout_id, seat_id),
+
+    FOREIGN KEY (layout_id)
+        REFERENCES national_rail_seat_layouts(layout_id)
+
+);
+
 CREATE TABLE IF NOT EXISTS metro_schedules (
 
     schedule_id VARCHAR(20) PRIMARY KEY,
@@ -167,38 +347,6 @@ CREATE TABLE IF NOT EXISTS payments (
     paid_at TIMESTAMPTZ
 );
 
-CREATE TABLE IF NOT EXISTS metro_travel_history (
-
-    trip_id VARCHAR(20) PRIMARY KEY,
-
-    user_id VARCHAR(10) NOT NULL,
-
-    schedule_id VARCHAR(20) NOT NULL,
-
-    origin_station_id VARCHAR(10) NOT NULL,
-
-    destination_station_id VARCHAR(10) NOT NULL,
-
-    travel_date DATE NOT NULL,
-
-    ticket_type VARCHAR(20),
-
-    day_pass_ref VARCHAR(20),
-
-    stops_travelled INT,
-
-    amount_usd DECIMAL(6,2),
-
-    status VARCHAR(20),
-
-    purchased_at TIMESTAMPTZ,
-
-    travelled_at TIMESTAMPTZ,
-
-    FOREIGN KEY (user_id)
-        REFERENCES registered_users(user_id)
-
-);
 
 CREATE TABLE IF NOT EXISTS feedback (
     feedback_id VARCHAR(20) PRIMARY KEY,
