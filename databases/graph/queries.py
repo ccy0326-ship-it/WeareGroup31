@@ -134,7 +134,44 @@ def query_interchange_path(origin_id: str, destination_id: str) -> dict:
     Returns:
         dict with found, stations list, interchange points, total_time_min
     """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
+    with _driver() as driver:
+        with driver.session() as session:
+
+            result = session.run(
+                """
+                MATCH p = shortestPath(
+                    (a:Station {station_id:$origin_id})-[*]-(b:Station {station_id:$destination_id})
+                )
+
+                RETURN
+                    [x IN nodes(p) | x.station_id] AS stations,
+                    reduce(total = 0,
+                           r IN relationships(p) |
+                           total + coalesce(r.travel_time_min, 0)
+                    ) AS total_time_min
+                """,
+                origin_id=origin_id,
+                destination_id=destination_id
+            )
+
+            record = result.single()
+
+            if not record:
+                return {
+                    "found": False
+                }
+
+            interchange_points = [
+                s for s in record["stations"]
+                if s.startswith("MS") or s.startswith("NR")
+            ]
+
+            return {
+                "found": True,
+                "stations": record["stations"],
+                "interchange_points": interchange_points,
+                "total_time_min": record["total_time_min"]
+            }
 
 
 # ── DELAY RIPPLE ANALYSIS ─────────────────────────────────────────────────────
@@ -151,8 +188,34 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
     Returns:
         List of dicts: {station_id, name, hops_away, lines_affected}
     """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
+    with _driver() as driver:
+        with driver.session() as session:
 
+            result = session.run(
+                """
+                MATCH (start:Station {station_id:$delayed_station_id})
+                MATCH p = (start)-[*1..2]-(affected:Station)
+                WHERE affected.station_id <> $delayed_station_id
+
+                RETURN DISTINCT
+                    affected.station_id AS station_id,
+                    affected.name AS name,
+                    length(p) AS hops_away,
+                    affected.lines AS lines_affected
+                ORDER BY hops_away, station_id
+                """,
+                delayed_station_id=delayed_station_id,
+            )
+
+            return [
+                {
+                    "station_id": record["station_id"],
+                    "name": record["name"],
+                    "hops_away": record["hops_away"],
+                    "lines_affected": record["lines_affected"]
+                }
+                for record in result
+            ]
 
 # ── STATION CONNECTIONS ───────────────────────────────────────────────────────
 
