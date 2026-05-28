@@ -220,10 +220,29 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
 # ── STATION CONNECTIONS ───────────────────────────────────────────────────────
 
 def query_station_connections(station_id: str) -> list[dict]:
-    """
-    List all direct connections from a given station.
+    with _driver() as driver:
+        with driver.session() as session:
 
-    Args:
-        station_id: e.g. "MS01" or "NR01"
-    """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
+            result = session.run(
+                """
+                MATCH (s:Station {station_id:$station_id})-[r]->(connected:Station)
+
+                RETURN
+                    connected.station_id AS station_id,
+                    connected.name AS name,
+                    type(r) AS connection_type,
+                    r.travel_time_min AS travel_time_min
+                ORDER BY connected.station_id
+                """,
+                station_id=station_id
+            )
+
+            return [
+                {
+                    "station_id": record["station_id"],
+                    "name": record["name"],
+                    "connection_type": record["connection_type"],
+                    "travel_time_min": record["travel_time_min"]
+                }
+                for record in result
+            ]
