@@ -354,8 +354,115 @@ def execute_booking(
         (True, booking_dict)   on success
         (False, error_message) on failure
     """
-    raise NotImplementedError("TODO: implement after designing your schema")
 
+    conn = psycopg2.connect(PG_DSN)
+
+    try:
+        conn.autocommit = False
+
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+
+            # Check if seat already booked
+            cur.execute("""
+            SELECT 1
+            FROM bookings
+            WHERE schedule_id = %s
+              AND travel_date = %s
+              AND seat_id = %s
+              AND status = 'confirmed'
+            """, (
+                schedule_id,
+                travel_date,
+                seat_id
+            ))
+
+            existing = cur.fetchone()
+
+            if existing:
+                conn.rollback()
+                return (False, "Seat already booked")
+
+            # Generate IDs
+            booking_id = _gen_booking_id()
+            payment_id = _gen_payment_id()
+
+            # Insert booking
+            cur.execute("""
+            INSERT INTO bookings (
+                booking_id,
+                user_id,
+                schedule_id,
+                origin_station_id,
+                destination_station_id,
+                travel_date,
+                departure_time,
+                ticket_type,
+                fare_class,
+                seat_id,
+                amount_usd,
+                status,
+                booked_at
+            )
+            VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, NOW()
+            )
+            """, (
+                booking_id,
+                user_id,
+                schedule_id,
+                origin_station_id,
+                destination_station_id,
+                travel_date,
+                "09:00",
+                ticket_type,
+                fare_class,
+                seat_id,
+                0,
+                "confirmed"
+            ))
+
+            # Insert payment
+            cur.execute("""
+            INSERT INTO payments (
+                payment_id,
+                booking_id,
+                amount_usd,
+                method,
+                status,
+                paid_at
+            )
+            VALUES (
+                %s, %s, %s, %s, %s, NOW()
+            )
+            """, (
+                payment_id,
+                booking_id,
+                0,
+                "credit_card",
+                "paid"
+            ))
+
+            conn.commit()
+
+            return (
+                True,
+                {
+                    "booking_id": booking_id,
+                    "payment_id": payment_id,
+                    "seat_id": seat_id,
+                    "status": "confirmed"
+                }
+            )
+
+    except Exception as e:
+
+        conn.rollback()
+        return (False, str(e))
+
+    finally:
+        conn.close()
 
 def execute_cancellation(booking_id: str, user_id: str) -> tuple[bool, dict | str]:
     """
