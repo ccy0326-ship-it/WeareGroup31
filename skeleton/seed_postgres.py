@@ -639,7 +639,7 @@ def seed_payments(cur):
         "payments",
         [
             "payment_id",
-            "booking_id",
+            "reference_id",
             "amount_usd",
             "method",
             "status",
@@ -672,7 +672,7 @@ def seed_feedback(cur):
         "feedback",
         [
             "feedback_id",
-            "booking_id",
+            "reference_id",
             "user_id",
             "rating",
             "comment",
