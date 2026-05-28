@@ -102,8 +102,35 @@ def query_national_rail_fare(
     Returns:
         dict with fare_class, base_fare_usd, per_stop_rate_usd, total_fare_usd
     """
-    raise NotImplementedError("TODO: implement after designing your schema")
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
 
+            cur.execute("""
+            SELECT
+            fare_class,
+            base_fare_usd,
+            per_stop_rate_usd
+            FROM national_rail_fare_classes
+            WHERE schedule_id = %s
+            AND fare_class = %s
+            """, (schedule_id, fare_class))
+
+            row = cur.fetchone()
+
+        if not row:
+            return None
+
+        total = (
+            row["base_fare_usd"] +
+            row["per_stop_rate_usd"] * stops_travelled
+        )
+
+        return {
+        "fare_class": row["fare_class"],
+        "base_fare_usd": row["base_fare_usd"],
+        "per_stop_rate_usd": row["per_stop_rate_usd"],
+        "total_fare_usd": round(total, 2)
+        }
 
 # ── METRO SCHEDULES & FARE ────────────────────────────────────────────────────
 
@@ -174,8 +201,46 @@ def query_available_seats(
     Returns:
         List of dicts: {seat_id, coach, row, column}
     """
-    raise NotImplementedError("TODO: implement after designing your schema")
 
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+
+            cur.execute("""
+
+            SELECT
+                s.seat_id,
+                s.coach,
+                s.row_number AS row,
+                s.column_letter AS column
+
+            FROM national_rail_seats s
+
+            JOIN national_rail_seat_layouts l
+                ON s.layout_id = l.layout_id
+
+            WHERE l.schedule_id = %s
+              AND s.fare_class = %s
+
+              AND s.seat_id NOT IN (
+
+                    SELECT b.seat_id
+                    FROM bookings b
+                    WHERE b.schedule_id = %s
+                      AND b.travel_date = %s
+                      AND b.status = 'confirmed'
+
+              )
+
+            ORDER BY s.coach, s.row_number, s.column_letter
+
+            """, (
+                schedule_id,
+                fare_class,
+                schedule_id,
+                travel_date
+            ))
+
+            return [dict(row) for row in cur.fetchall()]
 
 def auto_select_adjacent_seats(available_seats: list[dict], count: int) -> list[str]:
     """
@@ -335,10 +400,29 @@ def register_user(
 def login_user(email: str, password: str) -> Optional[dict]:
     """
     Verify credentials. Returns a user dict on success or None on failure.
-    Dict keys: user_id, email, full_name, first_name, surname, phone, date_of_birth, is_active.
+    Dict keys: user_id, email, full_name, phone, date_of_birth, is_active.
     """
-    raise NotImplementedError("TODO: implement after designing your schema")
 
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+
+            cur.execute("""
+            SELECT
+                user_id,
+                email,
+                full_name,
+                phone,
+                date_of_birth,
+                is_active
+            FROM registered_users
+            WHERE email = %s
+              AND password = %s
+              AND is_active = TRUE
+            """, (email, password))
+
+            row = cur.fetchone()
+
+        return dict(row) if row else None
 
 def get_user_secret_question(email: str) -> Optional[str]:
     """Return the secret question for a registered email, or None if not found."""
