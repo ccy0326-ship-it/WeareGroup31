@@ -12,6 +12,8 @@
 
 -- VARCHAR IDs are used because the provided mock JSON data
 -- already contains custom-readable IDs such as RU01 and BK001.
+-- Human-readable IDs simplify debugging and match the provided coursework dataset.
+-- Therefore VARCHAR identifiers are preferred over UUID or SERIAL keys.
 CREATE TABLE IF NOT EXISTS registered_users (
     user_id VARCHAR(10) PRIMARY KEY,
 
@@ -62,6 +64,7 @@ CREATE TABLE IF NOT EXISTS metro_station_lines (
 
     FOREIGN KEY (station_id)
         REFERENCES metro_stations(station_id)
+        ON DELETE CASCADE
 
 );
 
@@ -78,11 +81,12 @@ CREATE TABLE IF NOT EXISTS metro_station_connections (
     PRIMARY KEY (station_id, connected_station_id, line),
 
     FOREIGN KEY (station_id)
-        REFERENCES metro_stations(station_id),
+        REFERENCES metro_stations(station_id)
+        ON DELETE CASCADE,
 
     FOREIGN KEY (connected_station_id)
         REFERENCES metro_stations(station_id)
-
+        ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS metro_travel_history (
@@ -136,6 +140,7 @@ CREATE TABLE IF NOT EXISTS national_rail_stations (
 
 );
 
+
 CREATE TABLE IF NOT EXISTS national_rail_station_lines (
 
     station_id VARCHAR(10) NOT NULL,
@@ -146,7 +151,7 @@ CREATE TABLE IF NOT EXISTS national_rail_station_lines (
 
     FOREIGN KEY (station_id)
         REFERENCES national_rail_stations(station_id)
-
+        ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS national_rail_station_connections (
@@ -162,11 +167,12 @@ CREATE TABLE IF NOT EXISTS national_rail_station_connections (
     PRIMARY KEY (station_id, connected_station_id, line),
 
     FOREIGN KEY (station_id)
-        REFERENCES national_rail_stations(station_id),
+        REFERENCES national_rail_stations(station_id)
+        ON DELETE CASCADE,
 
     FOREIGN KEY (connected_station_id)
         REFERENCES national_rail_stations(station_id)
-
+        ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS national_rail_schedules (
@@ -190,13 +196,17 @@ CREATE TABLE IF NOT EXISTS national_rail_schedules (
     frequency_min INT NOT NULL,
 
     FOREIGN KEY (origin_station_id)
-        REFERENCES national_rail_stations(station_id),
+        REFERENCES national_rail_stations(station_id)
+        ON DELETE RESTRICT,
 
     FOREIGN KEY (destination_station_id)
         REFERENCES national_rail_stations(station_id)
-
+        ON DELETE RESTRICT
 );
 
+
+-- Stops are normalized into a separate table
+-- to support flexible route traversal and fare calculation.
 CREATE TABLE IF NOT EXISTS national_rail_schedule_stops (
 
     schedule_id VARCHAR(20) NOT NULL,
@@ -234,12 +244,12 @@ CREATE TABLE IF NOT EXISTS national_rail_fare_classes (
 
     FOREIGN KEY (schedule_id)
         REFERENCES national_rail_schedules(schedule_id)
-
+        ON DELETE CASCADE
 );
 
 
--- Hard delete strategy is used for coursework simplicity.
--- Related payments and feedback records cascade on deletion.
+-- Booking records are normally cancelled instead of deleted
+-- to preserve journey and payment history.
 CREATE TABLE IF NOT EXISTS bookings (
     booking_id VARCHAR(20) PRIMARY KEY,
 
@@ -281,16 +291,20 @@ CREATE TABLE IF NOT EXISTS bookings (
         ON DELETE CASCADE,
 
     FOREIGN KEY (schedule_id)
-        REFERENCES national_rail_schedules(schedule_id),
+        REFERENCES national_rail_schedules(schedule_id)
+        ON DELETE RESTRICT,
 
     FOREIGN KEY (origin_station_id)
-        REFERENCES national_rail_stations(station_id),
+        REFERENCES national_rail_stations(station_id)
+        ON DELETE RESTRICT,
 
     FOREIGN KEY (destination_station_id)
         REFERENCES national_rail_stations(station_id)
+        ON DELETE RESTRICT
 );
 
-
+-- Partial unique index prevents double-booking
+-- while still allowing cancelled bookings to exist.
 CREATE UNIQUE INDEX IF NOT EXISTS unique_confirmed_seat_booking
 ON bookings(schedule_id, travel_date, seat_id)
 WHERE status = 'confirmed';
@@ -304,9 +318,12 @@ CREATE TABLE IF NOT EXISTS national_rail_seat_layouts (
 
     FOREIGN KEY (schedule_id)
         REFERENCES national_rail_schedules(schedule_id)
-
+        ON DELETE CASCADE
 );
 
+
+-- Seat layouts are separated from schedules
+-- to support reusable carriage configurations.
 CREATE TABLE IF NOT EXISTS national_rail_seats (
 
     layout_id VARCHAR(20) NOT NULL,
@@ -325,7 +342,7 @@ CREATE TABLE IF NOT EXISTS national_rail_seats (
 
     FOREIGN KEY (layout_id)
         REFERENCES national_rail_seat_layouts(layout_id)
-
+        ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS metro_schedules (
@@ -351,11 +368,12 @@ CREATE TABLE IF NOT EXISTS metro_schedules (
     frequency_min INT,
 
     FOREIGN KEY (origin_station_id)
-        REFERENCES metro_stations(station_id),
+        REFERENCES metro_stations(station_id)
+        ON DELETE RESTRICT,
 
     FOREIGN KEY (destination_station_id)
         REFERENCES metro_stations(station_id)
-
+        ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS metro_schedule_stops (
@@ -371,11 +389,12 @@ CREATE TABLE IF NOT EXISTS metro_schedule_stops (
     PRIMARY KEY (schedule_id, station_id),
 
     FOREIGN KEY (schedule_id)
-        REFERENCES metro_schedules(schedule_id),
+        REFERENCES metro_schedules(schedule_id)
+        ON DELETE CASCADE,
 
     FOREIGN KEY (station_id)
         REFERENCES metro_stations(station_id)
-
+        ON DELETE CASCADE
 );
 
 -- reference_id may refer to either:
@@ -425,7 +444,7 @@ CREATE TABLE IF NOT EXISTS feedback (
 
     FOREIGN KEY (user_id)
         REFERENCES registered_users(user_id)
-
+        ON DELETE RESTRICT
 );  
 --  Start from the mock data in train-mock-data/:
 --    metro_stations.json, national_rail_stations.json

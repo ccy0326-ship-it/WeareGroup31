@@ -600,7 +600,6 @@ def _parse_tool_calls(llm_response: str) -> list[dict] | None:
     to call tools. Format:
         {"tool_calls": [{"name": "...", "params": {...}}, ...]}
     """
-    import re
     text = llm_response.strip()
     if text.startswith("```"):
         text = text.split("```")[1]
@@ -890,10 +889,10 @@ JSON:"""
         })
 
     # Step 3: Normalise raw tool results to plain English using the LLM, then
-    # compose the final answer.  The normalisation call replaces hand-crafted
-    # per-tool formatters: any tool a student adds works automatically.
+    # compose the final answer.
     _DB_KEYWORDS = {"booking", "ticket", "schedule", "fare", "route", "seat",
                     "train", "metro", "journey", "trip", "history", "reservation"}
+
     if tool_results:
         if len(tool_results) == 1:
             graph_answer = _format_task6_graph_answer(
@@ -923,7 +922,6 @@ JSON:"""
             f"\n\nAnswer using only the data above:"
         )
 
-        # 防止 compensation / refund 問題被 LLM 亂回答
         if (
             any(kw in user_message.lower() for kw in ["refund", "compensation"])
             and "RF005_R3" in data_block
@@ -946,18 +944,17 @@ JSON:"""
             return answer, updated_history
 
     elif any(kw in user_message.lower() for kw in _DB_KEYWORDS):
-        # No tool was called but the question needs DB data — prevent hallucination.
         content = (
             f"User asks: {user_message}\n\n"
             "IMPORTANT: No data was retrieved from the TransitFlow database for this query. "
             "Do NOT invent any bookings, fares, schedules, seat numbers, or travel times. "
             "Tell the user no data was found."
         )
+
     else:
         content = user_message
 
     final_messages = history + [{"role": "user", "content": content}]
-
     answer = llm.chat(messages=final_messages, system_prompt=contextual_prompt)
 
     # Force refund / compensation answers only for policy questions. Do not treat
@@ -967,14 +964,13 @@ JSON:"""
         or ("delay" in user_message.lower() and "refund" in user_message.lower())
         or ("delayed" in user_message.lower() and "refund" in user_message.lower())
     )
-    if _force_compensation:
-        numbers = re.findall(r'\d+', user_message)
-
-        answer = (
-            "Yes, you may be eligible for compensation if your train is delayed. "
-            "Please provide the delay time in minutes so I can calculate whether it is "
-            "no compensation, 50% refund, or 100% refund."
-        )
+    if (
+        _force_compensation
+        and "affected" not in user_message.lower()
+        and "ripple" not in user_message.lower()
+        and "disruption" not in user_message.lower()
+    ):
+        numbers = re.findall(r"\d+", user_message)
 
         if numbers:
             minutes = int(numbers[0])
