@@ -609,6 +609,8 @@ def execute_booking(
                 {
                     "booking_id": booking_id,
                     "payment_id": payment_id,
+                    "user_id": user_id,
+                    "schedule_id": schedule_id,
                     "seat_id": seat_id,
                     "status": "confirmed"
                 }
