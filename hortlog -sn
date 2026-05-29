@@ -1,0 +1,31 @@
+[33mf4e2ed8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Fix alternative route display
+[33m9a41edc[m Merge pull request #5 from ccy0326-ship-it/feature/postgres
+[33mf213434[m Complete PostgreSQL implementation and booking improvements
+[33m2e95df7[m Add station connection and alternative route support
+[33m1f80119[m Merge pull request #4 from ccy0326-ship-it/feature/postgres
+[33m052e1d4[m PostgreSQL fixes and schema improvements
+[33m3b89d53[m Add delay ripple disruption analysis
+[33mb6601a9[m Merge pull request #3 from ccy0326-ship-it/feature/postgres
+[33m7936834[m Complete PostgreSQL schema and query implementation
+[33m9202494[m Complete Neo4j route query functions
+[33m79595e3[m fix delay compensation policy
+[33m00e435f[m Merge pull request #2 from ccy0326-ship-it/feature/postgres
+[33maa4d7b2[m[33m ([m[1;31morigin/feature/postgres[m[33m)[m Improve PostgreSQL schema and booking transaction system
+[33m844b989[m Merge pull request #1 from ccy0326-ship-it/feature/postgres
+[33ma7ee8c3[m Add Neo4j station connections query
+[33m9b23fa6[m Implement booking transaction and seat availability system
+[33mc7c1583[m Implement authentication and seat availability queries
+[33m226273f[m Add Neo4j interchange path and delay ripple queries
+[33md4be97d[m Implement Neo4j metro and rail graph seeding
+[33m4661a6c[m Complete national rail relational schema and seeders
+[33m1219ff4[m Complete metro relational schema and PostgreSQL seeders
+[33m3de1e9c[m seed_neo4j.py
+[33m6826974[m Update seed_neo4j.py
+[33m7f29c8f[m improve refund logic
+[33m106a3d7[m improve compensation logic
+[33mc451f47[m fix compensation logic
+[33m8cec6c9[m Update README.md
+[33ma7f630a[m docs: add placeholder text to README
+[33m17d2ce2[m docs: add instructions and task list for project implementation to README.md
+[33m0f3a6b2[m docs: add implementation guidelines and code examples for database seeding scripts to README
+[33m9dba021[m[33m ([m[1;31morigin/master[m[33m)[m Initial commit

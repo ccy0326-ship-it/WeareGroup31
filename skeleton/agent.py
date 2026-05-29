@@ -768,27 +768,50 @@ JSON:"""
         if tool_results[0]["tool"] == "find_alternative_routes":
             data = json.loads(tool_results[0]["result"])
 
-        if not data:
-            answer = "No alternative route was found."
-        else:
-            route = data[0]["legs"]
+            if not data:
+                answer = "No alternative route was found."
+            else:
+                route = data[0].get("legs", data[0])
 
-            station_list = route["stations"]
+                station_list = route.get("stations", [])
+                route_text = " -> ".join(
+                    f"{s['station_id']} ({s['name']})"
+                    for s in station_list
+                )
 
-            print(route.keys())
+                answer = (
+                    f"Alternative route from {route.get('origin_id')} "
+                    f"to {route.get('destination_id')} "
+                    f"avoiding {route.get('avoid_station_id')}:\n\n"
+                    f"{route_text}\n\n"
+                    f"Total travel time: {route.get('total_time_min')} minutes"
+                )
 
-            stations = " -> ".join(
-                f"{s['station_id']} ({s['name']})"
-                for s in station_list
-            )
-            answer = (
-                f"Alternative route from "
-                f"{route['origin_id']} "
-                f"to {route['destination_id']} "
-                f"avoiding {route['avoid_station_id']}:\n\n"
-                f"{stations}\n\n"
-                f"Total travel time: {route['total_time_min']} minutes"
-    )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": answer},
+            ]
+
+            if debug:
+                return answer, updated_history, "\n\n".join(debug_info)
+
+            return answer, updated_history
+
+        if tool_results[0]["tool"] == "get_delay_ripple":
+            data = json.loads(tool_results[0]["result"])
+
+            if not data:
+                answer = "No stations are affected by the disruption."
+            else:
+                stations = "\n".join(
+                    f"- {s['station_id']} ({s['name']}) [{s['hops_away']} hops]"
+                    for s in data
+                )
+                answer = (
+                    f"Stations affected by disruption at "
+                    f"{tool_results[0]['params']['station_id']}:\n\n"
+                    f"{stations}"
+                )
 
             updated_history = history + [
                 {"role": "user", "content": user_message},
@@ -836,65 +859,3 @@ JSON:"""
                 return answer, updated_history, "\n\n".join(debug_info)
 
             return answer, updated_history
-
-    elif any(kw in user_message.lower() for kw in _DB_KEYWORDS):
-        content = (
-            f"User asks: {user_message}\n\n"
-            "IMPORTANT: No data was retrieved from the TransitFlow database for this query. "
-            "Do NOT invent any bookings, fares, schedules, seat numbers, or travel times. "
-            "Tell the user no data was found."
-        )
-
-    else:
-        content = user_message
-
-    final_messages = history + [{"role": "user", "content": content}]
-    answer = llm.chat(messages=final_messages, system_prompt=contextual_prompt)
-
-    # Force delay compensation answer
-  
-    numbers = re.findall(r"\d+", user_message)
-
-    if (
-    any(kw in user_message.lower() for kw in ["refund", "compensation"])
-    and "affected" not in user_message.lower()
-    and "ripple" not in user_message.lower()
-    and "disruption" not in user_message.lower()
-        ):
-
-        if numbers:
-            minutes = int(numbers[0])
-
-            if minutes >= 120:
-                answer = (
-                    f"If your train is delayed {minutes} minutes or more due to operator fault, "
-                    "you receive a 100% refund of the delayed fare, plus reimbursement "
-                    "for meals and hotel costs if eligible. "
-                    "Submit a claim with receipts within 28 days."
-                )
-            elif minutes >= 60:
-                answer = (
-                    f"If your train is delayed {minutes} minutes due to operator fault, "
-                    "you receive a 100% refund of the delayed fare."
-                )
-            elif minutes >= 30:
-                answer = (
-                    f"If your train is delayed {minutes} minutes due to operator fault, "
-                    "you receive a 50% refund of the fare for the delayed leg."
-                )
-            else:
-                answer = (
-                    f"No compensation is available for delays under 30 minutes "
-                    f"(your delay: {minutes} minutes)."
-                )
-                
-    # Update history
-    updated_history = history + [
-        {"role": "user", "content": user_message},
-        {"role": "assistant", "content": answer},
-    ]
-
-    if debug:
-        return answer, updated_history, "\n\n".join(debug_info)
-
-    return answer, updated_history
