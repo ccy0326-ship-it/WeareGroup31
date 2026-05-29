@@ -248,9 +248,8 @@ CREATE TABLE IF NOT EXISTS national_rail_fare_classes (
 );
 
 
--- Soft delete strategy:
--- bookings are marked as cancelled instead of deleted
--- to preserve payment and audit history.
+-- Booking records are normally cancelled instead of deleted
+-- to preserve journey and payment history.
 CREATE TABLE IF NOT EXISTS bookings (
     booking_id VARCHAR(20) PRIMARY KEY,
 
