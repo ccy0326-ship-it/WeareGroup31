@@ -80,7 +80,7 @@ def query_national_rail_availability(
 ) -> list[dict]:
     """
     Return national rail schedules that serve both origin and destination stations
-    in the correct order, along with seat occupancy for the requested travel date.
+    in the correct order, along with available seats for the requested travel date.
     """
 
     with _connect() as conn:
@@ -92,7 +92,14 @@ def query_national_rail_availability(
                 nrs.schedule_id,
                 nrs.first_train_time AS departure_time,
                 nrs.last_train_time AS arrival_time,
-                COUNT(b.booking_id) AS booked_seats
+
+                (
+                    SELECT COUNT(*)
+                    FROM national_rail_seats s
+                    JOIN national_rail_seat_layouts l
+                        ON s.layout_id = l.layout_id
+                    WHERE l.schedule_id = nrs.schedule_id
+                ) - COUNT(DISTINCT b.booking_id) AS available_seats
 
             FROM national_rail_schedules nrs
 
@@ -125,7 +132,7 @@ def query_national_rail_availability(
             ))
 
             return [dict(row) for row in cur.fetchall()]
-
+            
 
 def query_national_rail_fare(
     schedule_id: str,
