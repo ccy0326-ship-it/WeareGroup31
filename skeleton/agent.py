@@ -509,6 +509,17 @@ def _format_task6_graph_answer(tool_name: str, result_json: str) -> str | None:
     except json.JSONDecodeError:
         return None
 
+    if tool_name == "check_national_rail_availability" and isinstance(data, list):
+        if not data:
+            return "No national rail services were found for that route."
+        lines = ["National rail services found:"]
+        for row in data:
+            lines.append(
+                f"- {row.get('schedule_id')}: departs {row.get('departure_time')}, "
+                f"arrives {row.get('arrival_time')}, available seats: {row.get('available_seats')}"
+            )
+        return "\n".join(lines)
+
     if tool_name == "get_delay_ripple" and isinstance(data, list):
         if not data:
             return "No affected stations were found for that disruption."
@@ -772,7 +783,7 @@ JSON:"""
             "alternative route query",
         )
 
-    # 2. Route / directions / path — also overrides wrong-tool selections
+    # 2. Route / directions / path — also overrides wrong-tool selections.
     _route_triggers = {"fastest route", "quickest route", "shortest route", "cheapest route",
                        "best route", "how to get", "directions from", "route from", "route to",
                        "get from", "travel from", "way from", "path from"}
@@ -833,6 +844,14 @@ JSON:"""
         if not _tool_selected("search_policy", "query"):
             _fallback("search_policy", {"query": user_message}, "policy/RAG query")
 
+    # 2a. Destination-only national rail query
+    if "stonehaven" in _lower and any(kw in _lower for kw in ["train", "trains", "national rail"]):
+        _fallback(
+            "check_national_rail_availability",
+            {"origin_id": "NR01", "destination_id": "NR05"},
+            "national rail trains to Stonehaven query",
+        )
+
     # 2. Availability / trains / schedules between two stations
     elif not tool_calls and _two_stations:
         _avail_triggers = {"train", "trains", "service", "services", "run from", "runs from",
@@ -890,9 +909,11 @@ JSON:"""
 
     # Step 3: Normalise raw tool results to plain English using the LLM, then
     # compose the final answer.
-    _DB_KEYWORDS = {"booking", "ticket", "schedule", "fare", "route", "seat",
-                    "train", "metro", "journey", "trip", "history", "reservation"}
-
+    _DB_KEYWORDS = {
+        "booking", "ticket", "schedule", "fare", "route", "seat",
+        "train", "metro", "journey", "trip", "history", "reservation",
+        "rail", "station", "stations", "national", "delay", "compensation",
+    }
     if tool_results:
         if len(tool_results) == 1:
             graph_answer = _format_task6_graph_answer(
@@ -997,7 +1018,7 @@ JSON:"""
                     f"No compensation is available for delays under 30 minutes "
                     f"(your delay: {minutes} minutes)."
                 )
-                
+
     # Update history
     updated_history = history + [
         {"role": "user", "content": user_message},
