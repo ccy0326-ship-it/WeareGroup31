@@ -57,24 +57,18 @@ def query_shortest_route(
 ) -> dict:
     """
     Find the fastest path between two stations, minimising total travel time.
-    Uses apoc.algo.dijkstra (APOC required; enabled in docker-compose.yml).
-
-    Args:
-        origin_id:       e.g. "MS01" or "NR01"
-        destination_id:  e.g. "MS09" or "NR05"
-        network:         "metro", "rail", or "auto" (inferred from IDs)
-
-    Returns:
-        dict with keys: found, origin_id, destination_id,
-                        total_time_min, path (list of station dicts), legs
+    This uses all simple paths up to 10 hops and orders by total travel_time_min.
     """
     with _driver() as driver:
         with driver.session() as session:
             result = session.run(
                 """
-                MATCH p = shortestPath(
-                    (a:Station {station_id:$origin_id})-[*]-(b:Station {station_id:$destination_id})
-                )
+                MATCH p = (a:Station {station_id:$origin_id})-[*1..10]-(b:Station {station_id:$destination_id})
+                WITH p,
+                     reduce(total = 0,
+                         r IN relationships(p) |
+                         total + coalesce(r.travel_time_min, 0)
+                     ) AS total_time_min
                 RETURN
                     [x IN nodes(p) | {
                         station_id: x.station_id,
@@ -87,10 +81,9 @@ def query_shortest_route(
                         line: r.line,
                         travel_time_min: coalesce(r.travel_time_min, 0)
                     }] AS legs,
-                    reduce(total = 0,
-                        r IN relationships(p) |
-                        total + coalesce(r.travel_time_min, 0)
-                    ) AS total_time_min
+                    total_time_min
+                ORDER BY total_time_min ASC
+                LIMIT 1
                 """,
                 origin_id=origin_id,
                 destination_id=destination_id
@@ -116,7 +109,6 @@ def query_shortest_route(
                 "path": record["path"],
                 "legs": record["legs"]
             }
-
 # ── CHEAPEST ROUTE (Dijkstra by fare) ────────────────────────────────────────
 
 def query_cheapest_route(
@@ -397,9 +389,9 @@ def query_station_connections(station_id: str) -> list[dict]:
 
             result = session.run(
                 """
-                MATCH (s:Station {station_id:$station_id})-[r]-(connected:Station)
+                MATCH (s:Station {station_id:$station_id})-[r]->(connected:Station)
 
-                RETURN DISTINCT
+                RETURN
                     connected.station_id AS station_id,
                     connected.name AS name,
                     type(r) AS connection_type,
