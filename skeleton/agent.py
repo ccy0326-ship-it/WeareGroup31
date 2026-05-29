@@ -667,6 +667,24 @@ JSON:"""
             "delay ripple query"
         )
 
+    # 0.5 Alternative route / avoiding station
+    _alternative_triggers = {"alternative route", "avoid", "avoiding", "closed station", "bypass"}
+    if (
+        any(kw in _lower for kw in _alternative_triggers)
+        and len(_station_ids) >= 3
+        and not _tool_selected("find_alternative_routes", "origin_id", "destination_id", "avoid_station_id")
+    ):
+        _fallback(
+            "find_alternative_routes",
+            {
+                "origin_id": _station_ids[0].upper(),
+                "destination_id": _station_ids[1].upper(),
+                "avoid_station_id": _station_ids[2].upper(),
+                "network": "auto",
+            },
+            "alternative route query"
+        )
+
     # 1. Route / directions / path — also overrides wrong-tool selections
     _route_triggers = {"fastest route", "quickest route", "shortest route", "cheapest route",
                        "best route", "how to get", "directions from", "route from", "route to",
@@ -675,7 +693,12 @@ JSON:"""
         any(kw in _lower for kw in _route_triggers) or
         (_two_stations and "route" in _lower)
     )
-    if _is_route and _two_stations and not _tool_selected("find_route", "origin_id", "destination_id"):
+    if (
+    _is_route
+    and _two_stations
+    and not any(kw in _lower for kw in ["alternative route", "avoid", "avoiding", "closed station", "bypass"])
+    and not _tool_selected("find_route", "origin_id", "destination_id")
+):
         _opt = "cost" if any(kw in _lower for kw in ["cheap", "cheapest", "lowest cost"]) else "time"
         _fallback("find_route",
                   {"origin_id": _station_ids[0].upper(), "destination_id": _station_ids[1].upper(), "optimise_by": _opt},
@@ -742,22 +765,30 @@ JSON:"""
                     "train", "metro", "journey", "trip", "history", "reservation"}
 
     if tool_results:
-        if tool_results[0]["tool"] == "get_delay_ripple":
+        if tool_results[0]["tool"] == "find_alternative_routes":
             data = json.loads(tool_results[0]["result"])
 
-            if not data:
-                answer = "No stations are affected by the disruption."
-            else:
-                stations = "\n".join(
-                    f"- {s['station_id']} ({s['name']}) [{s['hops_away']} hops]"
-                    for s in data
-                )
+        if not data:
+            answer = "No alternative route was found."
+        else:
+            route = data[0]["legs"]
 
-                answer = (
-                    f"Stations affected by disruption at "
-                    f"{tool_results[0]['params']['station_id']}:\n\n"
-                    f"{stations}"
-                )
+            station_list = route["stations"]
+
+            print(route.keys())
+
+            stations = " -> ".join(
+                f"{s['station_id']} ({s['name']})"
+                for s in station_list
+            )
+            answer = (
+                f"Alternative route from "
+                f"{route['origin_id']} "
+                f"to {route['destination_id']} "
+                f"avoiding {route['avoid_station_id']}:\n\n"
+                f"{stations}\n\n"
+                f"Total travel time: {route['total_time_min']} minutes"
+    )
 
             updated_history = history + [
                 {"role": "user", "content": user_message},
