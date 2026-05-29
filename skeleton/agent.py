@@ -505,7 +505,6 @@ def _parse_tool_calls(llm_response: str) -> list[dict] | None:
     to call tools. Format:
         {"tool_calls": [{"name": "...", "params": {...}}, ...]}
     """
-    import re
     text = llm_response.strip()
     if text.startswith("```"):
         text = text.split("```")[1]
@@ -655,6 +654,19 @@ JSON:"""
         if debug:
             debug_info.append(f"**Fallback:** {reason} → {name}({params})")
 
+    # 0. Delay ripple / disruption impact
+    _delay_ripple_triggers = {"delay ripple", "affected", "disruption", "disrupted", "closed", "station affected"}
+    if (
+        any(kw in _lower for kw in _delay_ripple_triggers)
+        and _station_ids
+        and not _tool_selected("get_delay_ripple", "station_id")
+    ):
+        _fallback(
+            "get_delay_ripple",
+            {"station_id": _station_ids[0].upper(), "hops": 2},
+            "delay ripple query"
+        )
+
     # 1. Route / directions / path — also overrides wrong-tool selections
     _route_triggers = {"fastest route", "quickest route", "shortest route", "cheapest route",
                        "best route", "how to get", "directions from", "route from", "route to",
@@ -725,11 +737,38 @@ JSON:"""
         })
 
     # Step 3: Normalise raw tool results to plain English using the LLM, then
-    # compose the final answer.  The normalisation call replaces hand-crafted
-    # per-tool formatters: any tool a student adds works automatically.
+    # compose the final answer.
     _DB_KEYWORDS = {"booking", "ticket", "schedule", "fare", "route", "seat",
                     "train", "metro", "journey", "trip", "history", "reservation"}
+
     if tool_results:
+        if tool_results[0]["tool"] == "get_delay_ripple":
+            data = json.loads(tool_results[0]["result"])
+
+            if not data:
+                answer = "No stations are affected by the disruption."
+            else:
+                stations = "\n".join(
+                    f"- {s['station_id']} ({s['name']}) [{s['hops_away']} hops]"
+                    for s in data
+                )
+
+                answer = (
+                    f"Stations affected by disruption at "
+                    f"{tool_results[0]['params']['station_id']}:\n\n"
+                    f"{stations}"
+                )
+
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": answer},
+            ]
+
+            if debug:
+                return answer, updated_history, "\n\n".join(debug_info)
+
+            return answer, updated_history
+
         data_block = "\n\n".join(
             f"[{tr['tool']}]\n{_normalise_result(tr['tool'], tr['result'])}"
             for tr in tool_results
@@ -744,7 +783,6 @@ JSON:"""
             f"\n\nAnswer using only the data above:"
         )
 
-        # 防止 compensation / refund 問題被 LLM 亂回答
         if (
             ("delay" in user_message.lower()
             or "refund" in user_message.lower()
@@ -769,29 +807,29 @@ JSON:"""
             return answer, updated_history
 
     elif any(kw in user_message.lower() for kw in _DB_KEYWORDS):
-        # No tool was called but the question needs DB data — prevent hallucination.
         content = (
             f"User asks: {user_message}\n\n"
             "IMPORTANT: No data was retrieved from the TransitFlow database for this query. "
             "Do NOT invent any bookings, fares, schedules, seat numbers, or travel times. "
             "Tell the user no data was found."
         )
+
     else:
         content = user_message
 
     final_messages = history + [{"role": "user", "content": content}]
-
     answer = llm.chat(messages=final_messages, system_prompt=contextual_prompt)
 
     # Force delay compensation answer
-    if any(kw in user_message.lower() for kw in ["delay", "delayed", "refund", "compensation"]):
-        numbers = re.findall(r'\d+', user_message)
+  
+    numbers = re.findall(r"\d+", user_message)
 
-        answer = (
-            "Yes, you may be eligible for compensation if your train is delayed. "
-            "Please provide the delay time in minutes so I can calculate whether it is "
-            "no compensation, 50% refund, or 100% refund."
-        )
+    if (
+    any(kw in user_message.lower() for kw in ["refund", "compensation"])
+    and "affected" not in user_message.lower()
+    and "ripple" not in user_message.lower()
+    and "disruption" not in user_message.lower()
+        ):
 
         if numbers:
             minutes = int(numbers[0])
