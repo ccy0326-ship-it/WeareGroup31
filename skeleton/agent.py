@@ -806,14 +806,19 @@ JSON:"""
             elif minutes >= 60:
                 answer = (
                     f"If your train is delayed {minutes} minutes due to operator fault, "
-                    "you receive a 50% refund of the delayed fare."
+                    "you receive a 100% refund of the delayed fare."
+                )
+            elif minutes >= 30:
+                answer = (
+                    f"If your train is delayed {minutes} minutes due to operator fault, "
+                    "you receive a 50% refund of the fare for the delayed leg."
                 )
             else:
                 answer = (
-                    f"No compensation is available for delays under 60 minutes "
+                    f"No compensation is available for delays under 30 minutes "
                     f"(your delay: {minutes} minutes)."
                 )
-
+                
     # Update history
     updated_history = history + [
         {"role": "user", "content": user_message},
