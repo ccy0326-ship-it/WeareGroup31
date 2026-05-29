@@ -1,5 +1,9 @@
 """
 TransitFlow — Neo4j Seeder
+# TASK 6 EXTENSION:
+# Seeds extra graph relationship properties used by the extension queries:
+# metro fares, rail fare classes, express rail links, and interchange costs.
+
 Run once after starting Docker:
     python skeleton/seed_neo4j.py
 
@@ -32,7 +36,22 @@ def _load(filename):
 
 def seed():
     metro_stations = _load("metro_stations.json")
-    rail_stations  = _load("national_rail_stations.json")
+    metro_schedules = _load("metro_schedules.json")
+    rail_stations = _load("national_rail_stations.json")
+    rail_schedules = _load("national_rail_schedules.json")
+
+    metro_fare_by_line = {
+        schedule["line"]: float(schedule["per_stop_rate_usd"])
+        for schedule in metro_schedules
+    }
+    rail_fare_by_line = {
+        schedule["line"]: {
+            "standard": float(schedule["fare_classes"]["standard"]["per_stop_rate_usd"]),
+            "first": float(schedule["fare_classes"]["first"]["per_stop_rate_usd"]),
+        }
+        for schedule in rail_schedules
+        if schedule["service_type"] == "normal"
+    }
 
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
     with driver.session() as session:
@@ -62,12 +81,14 @@ def seed():
                     MATCH (b:MetroStation {station_id: $to_id})
                     MERGE (a)-[r:METRO_LINK]->(b)
                     SET r.line = $line,
-                        r.travel_time_min = $travel_time_min
+                        r.travel_time_min = $travel_time_min,
+                        r.fare_usd = $fare_usd
                     """,
                     from_id=s["station_id"],
                     to_id=adj["station_id"],
                     line=adj["line"],
                     travel_time_min=adj["travel_time_min"],
+                    fare_usd=metro_fare_by_line.get(adj["line"], 0.30),
                 )
         # Create national rail station nodes
         for s in rail_stations:
@@ -99,12 +120,48 @@ def seed():
                     MATCH (b:RailStation {station_id: $to_id})
                     MERGE (a)-[r:RAIL_LINK]->(b)
                     SET r.line = $line,
-                        r.travel_time_min = $travel_time_min
+                        r.service_type = 'normal',
+                        r.travel_time_min = $travel_time_min,
+                        r.fare_standard_usd = $fare_standard_usd,
+                        r.fare_first_usd = $fare_first_usd
                     """,
                     from_id=s["station_id"],
                     to_id=adj["station_id"],
                     line=adj["line"],
                     travel_time_min=adj["travel_time_min"],
+                    fare_standard_usd=rail_fare_by_line.get(adj["line"], {}).get("standard", 1.50),
+                    fare_first_usd=rail_fare_by_line.get(adj["line"], {}).get("first", 2.50),
+                )
+
+        # Create express rail links between the stations where express services stop.
+        for schedule in rail_schedules:
+            if schedule["service_type"] != "express":
+                continue
+
+            stops = schedule["stops_in_order"]
+            times = schedule["travel_time_from_origin_min"]
+            standard_fare = float(schedule["fare_classes"]["standard"]["per_stop_rate_usd"])
+            first_fare = float(schedule["fare_classes"]["first"]["per_stop_rate_usd"])
+
+            for from_id, to_id in zip(stops, stops[1:]):
+                session.run(
+                    """
+                    MATCH (a:RailStation {station_id: $from_id})
+                    MATCH (b:RailStation {station_id: $to_id})
+                    MERGE (a)-[r:RAIL_EXPRESS_LINK {schedule_id: $schedule_id}]->(b)
+                    SET r.line = $line,
+                        r.service_type = 'express',
+                        r.travel_time_min = $travel_time_min,
+                        r.fare_standard_usd = $fare_standard_usd,
+                        r.fare_first_usd = $fare_first_usd
+                    """,
+                    from_id=from_id,
+                    to_id=to_id,
+                    schedule_id=schedule["schedule_id"],
+                    line=schedule["line"],
+                    travel_time_min=times[to_id] - times[from_id],
+                    fare_standard_usd=standard_fare,
+                    fare_first_usd=first_fare,
                 )
 
         # Create interchange relationships between rail and metro
@@ -116,9 +173,11 @@ def seed():
                     MATCH (r:RailStation {station_id: $rail_id})
                     MATCH (m:MetroStation {station_id: $metro_id})
                     MERGE (r)-[a:INTERCHANGE]->(m)
-                    SET a.travel_time_min = 5
+                    SET a.travel_time_min = 5,
+                        a.fare_usd = 0.0
                     MERGE (m)-[b:INTERCHANGE]->(r)
-                    SET b.travel_time_min = 5
+                    SET b.travel_time_min = 5,
+                        b.fare_usd = 0.0
                     """,
                     rail_id=s["station_id"],
                     metro_id=metro_id,

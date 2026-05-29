@@ -1,5 +1,9 @@
 """TransitFlow — PostgreSQL / Relational Database Layer
 =====================================================
+# TASK 6 EXTENSION:
+# Adds clear_policy_documents(), used by the vector seeder to rebuild the RAG
+# policy index without duplicate policy rows.
+
 This module handles all queries to PostgreSQL.
 
 TWO ROLES ARE SERVED HERE:
@@ -908,3 +912,11 @@ def store_policy_document(
         with conn.cursor() as cur:
             cur.execute(sql, (title, category, content, vec_str, source_file))
             return cur.fetchone()[0]
+
+
+def clear_policy_documents() -> int:
+    """Remove existing policy documents before reseeding the vector index."""
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM policy_documents")
+            return cur.rowcount

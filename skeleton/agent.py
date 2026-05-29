@@ -1,6 +1,11 @@
 """
 TransitFlow — Intelligent Agent
 ================================
+# TASK 6 EXTENSION:
+# Adds deterministic routing/policy fallbacks and result formatting so Task 6
+# route, alternative-route, interchange, delay-ripple, and RAG answers use real
+# DB results instead of LLM guesses.
+
 This is the brain of the system.
 
 HOW IT WORKS (the pipeline students should understand):
@@ -497,6 +502,96 @@ def _summarise_result(tool_name: str, result_json: str) -> str:
     return result_json
 
 
+def _format_task6_graph_answer(tool_name: str, result_json: str) -> str | None:
+    """Format Task 6 graph outputs directly from database JSON."""
+    try:
+        data = json.loads(result_json)
+    except json.JSONDecodeError:
+        return None
+
+    if tool_name == "get_delay_ripple" and isinstance(data, list):
+        if not data:
+            return "No affected stations were found for that disruption."
+        lines = ["Affected stations:"]
+        for row in data:
+            affected_lines = ", ".join(row.get("lines_affected") or [])
+            lines.append(
+                f"- {row.get('station_id')} {row.get('name')}: "
+                f"{row.get('hops_away')} hop(s) away; lines affected: {affected_lines}"
+            )
+        return "\n".join(lines)
+
+    if tool_name == "find_alternative_routes" and isinstance(data, list):
+        if not data:
+            return "No alternative route was found for those stations and avoidance constraint."
+        lines = ["Alternative routes:"]
+        for route in data:
+            legs = route.get("legs") or []
+            if not legs:
+                continue
+            route_no = route.get("route_number", "?")
+            total = legs[0].get("route_total_time_min")
+            station_names = [legs[0].get("from_name")] + [leg.get("to_name") for leg in legs]
+            lines.append(f"- Route {route_no}: {' -> '.join(station_names)} ({total} min)")
+        return "\n".join(lines)
+
+    if tool_name == "find_route" and isinstance(data, dict):
+        if not data.get("found"):
+            return "No route was found for those stations."
+        path = data.get("path") or []
+        legs = data.get("legs") or []
+        station_names = [station.get("name") for station in path]
+        total_time = data.get("total_time_min")
+        total_fare = data.get("total_fare_usd")
+
+        lines = []
+        if total_time is not None:
+            lines.append(f"Route found: {' -> '.join(station_names)} ({total_time} min)")
+        elif total_fare is not None:
+            lines.append(f"Cheapest route found: {' -> '.join(station_names)} (${total_fare})")
+        else:
+            lines.append(f"Route found: {' -> '.join(station_names)}")
+
+        if data.get("interchange_points"):
+            points = [
+                f"{p.get('from_name')} to {p.get('to_name')}"
+                for p in data["interchange_points"]
+            ]
+            lines.append(f"Interchange: {', '.join(points)}")
+
+        if legs:
+            lines.append("Legs:")
+            for leg in legs:
+                detail = leg.get("line") or leg.get("connection_type")
+                lines.append(
+                    f"- {leg.get('from_name')} -> {leg.get('to_name')}: "
+                    f"{leg.get('travel_time_min')} min via {detail}"
+                )
+        return "\n".join(lines)
+
+    if tool_name == "search_policy" and isinstance(data, list):
+        if not data:
+            return "No matching policy documents were found."
+
+        lines = ["Relevant policy information from the database:"]
+        for doc in data[:3]:
+            content = doc.get("content") or ""
+            title = doc.get("title")
+            similarity = doc.get("similarity")
+            lines.append(f"- {title} (similarity {similarity})")
+
+            for condition in re.findall(r'"condition":\s*"([^"]+)"', content)[:2]:
+                lines.append(f"  condition: {condition}")
+            for percent in re.findall(r'"refund_percent":\s*(\d+)', content)[:2]:
+                lines.append(f"  refund percent: {percent}%")
+            notes = re.search(r'"notes":\s*"([^"]+)"', content)
+            if notes:
+                lines.append(f"  notes: {notes.group(1)}")
+        return "\n".join(lines)
+
+    return None
+
+
 def _parse_tool_calls(llm_response: str) -> list[dict] | None:
     """
     Parse tool call JSON from the LLM response.
@@ -655,7 +750,30 @@ JSON:"""
         if debug:
             debug_info.append(f"**Fallback:** {reason} → {name}({params})")
 
-    # 1. Route / directions / path — also overrides wrong-tool selections
+    # 1. Alternative route with an avoided station — must run before generic route.
+    _avoid_triggers = {"avoid", "avoiding", "without", "bypass", "around"}
+    _is_alternative_route = (
+        len(_station_ids) >= 3
+        and any(kw in _lower for kw in ["alternative", "route", "routes"])
+        and any(kw in _lower for kw in _avoid_triggers)
+    )
+    if _is_alternative_route and not _tool_selected(
+        "find_alternative_routes",
+        "origin_id",
+        "destination_id",
+        "avoid_station_id",
+    ):
+        _fallback(
+            "find_alternative_routes",
+            {
+                "origin_id": _station_ids[0].upper(),
+                "destination_id": _station_ids[1].upper(),
+                "avoid_station_id": _station_ids[2].upper(),
+            },
+            "alternative route query",
+        )
+
+    # 2. Route / directions / path — also overrides wrong-tool selections
     _route_triggers = {"fastest route", "quickest route", "shortest route", "cheapest route",
                        "best route", "how to get", "directions from", "route from", "route to",
                        "get from", "travel from", "way from", "path from"}
@@ -663,11 +781,58 @@ JSON:"""
         any(kw in _lower for kw in _route_triggers) or
         (_two_stations and "route" in _lower)
     )
-    if _is_route and _two_stations and not _tool_selected("find_route", "origin_id", "destination_id"):
-        _opt = "cost" if any(kw in _lower for kw in ["cheap", "cheapest", "lowest cost"]) else "time"
+    _route_call = next((c for c in tool_calls if c.get("name") == "find_route"), None)
+    _route_params = (_route_call or {}).get("params") or {}
+    _wanted_opt = "cost" if any(kw in _lower for kw in ["cheap", "cheapest", "lowest cost"]) else "time"
+    _wrong_route_tool = (
+        _route_call is not None
+        and _two_stations
+        and (
+            _route_params.get("origin_id") != _station_ids[0].upper()
+            or _route_params.get("destination_id") != _station_ids[1].upper()
+            or _route_params.get("optimise_by", _wanted_opt) != _wanted_opt
+        )
+    )
+    if (
+        _is_route
+        and _two_stations
+        and not _is_alternative_route
+        and (
+            not _tool_selected("find_route", "origin_id", "destination_id")
+            or _wrong_route_tool
+        )
+    ):
         _fallback("find_route",
-                  {"origin_id": _station_ids[0].upper(), "destination_id": _station_ids[1].upper(), "optimise_by": _opt},
+                  {"origin_id": _station_ids[0].upper(), "destination_id": _station_ids[1].upper(), "optimise_by": _wanted_opt},
                   "route query")
+
+    # 2b. Delay ripple / disruption impact — keep this separate from refund policy.
+    _delay_ripple_triggers = {
+        "affected", "affect", "disrupted", "disruption", "closed", "closure",
+        "delayed within", "delay ripple", "within"
+    }
+    _is_delay_ripple = (
+        len(_station_ids) >= 1
+        and any(kw in _lower for kw in ["delay", "delayed", "disruption", "disrupted", "closed"])
+        and any(kw in _lower for kw in _delay_ripple_triggers)
+    )
+    if _is_delay_ripple and not _tool_selected("get_delay_ripple", "station_id"):
+        _hops_match = re.search(r'\b(\d+)\s*hops?\b', _lower)
+        _params = {"station_id": _station_ids[0].upper()}
+        if _hops_match:
+            _params["hops"] = int(_hops_match.group(1))
+        _fallback("get_delay_ripple", _params, "delay ripple query")
+
+    # 2c. Policy / RAG questions — override accidental fare/route selections.
+    _policy_triggers = {
+        "refund", "compensation", "policy", "policies", "rule", "rules",
+        "luggage", "bicycle", "bike", "pet", "pets", "day pass", "ticket type",
+        "ticket types", "conduct"
+    }
+    _is_policy = any(kw in _lower for kw in _policy_triggers)
+    if _is_policy and not _is_delay_ripple and not _is_route:
+        if not _tool_selected("search_policy", "query"):
+            _fallback("search_policy", {"query": user_message}, "policy/RAG query")
 
     # 2. Availability / trains / schedules between two stations
     elif not tool_calls and _two_stations:
@@ -730,6 +895,20 @@ JSON:"""
     _DB_KEYWORDS = {"booking", "ticket", "schedule", "fare", "route", "seat",
                     "train", "metro", "journey", "trip", "history", "reservation"}
     if tool_results:
+        if len(tool_results) == 1:
+            graph_answer = _format_task6_graph_answer(
+                tool_results[0]["tool"],
+                tool_results[0]["result"],
+            )
+            if graph_answer:
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": graph_answer},
+                ]
+                if debug:
+                    return graph_answer, updated_history, "\n\n".join(debug_info)
+                return graph_answer, updated_history
+
         data_block = "\n\n".join(
             f"[{tr['tool']}]\n{_normalise_result(tr['tool'], tr['result'])}"
             for tr in tool_results
@@ -746,9 +925,7 @@ JSON:"""
 
         # 防止 compensation / refund 問題被 LLM 亂回答
         if (
-            ("delay" in user_message.lower()
-            or "refund" in user_message.lower()
-            or "compensation" in user_message.lower())
+            any(kw in user_message.lower() for kw in ["refund", "compensation"])
             and "RF005_R3" in data_block
         ):
             answer = (
@@ -783,8 +960,14 @@ JSON:"""
 
     answer = llm.chat(messages=final_messages, system_prompt=contextual_prompt)
 
-    # Force delay compensation answer
-    if any(kw in user_message.lower() for kw in ["delay", "delayed", "refund", "compensation"]):
+    # Force refund / compensation answers only for policy questions. Do not treat
+    # delay-ripple route questions such as "delayed within 3 hops" as minutes.
+    _force_compensation = (
+        "compensation" in user_message.lower()
+        or ("delay" in user_message.lower() and "refund" in user_message.lower())
+        or ("delayed" in user_message.lower() and "refund" in user_message.lower())
+    )
+    if _force_compensation:
         numbers = re.findall(r'\d+', user_message)
 
         answer = (

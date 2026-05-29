@@ -1,5 +1,9 @@
 """
 TransitFlow — pgvector Policy Document Seeder
+# TASK 6 EXTENSION:
+# Makes vector reseeding repeatable by clearing old policy documents first and
+# adds clearer embedding-dimension guidance for Ollama vs Gemini.
+
 Run once after starting Docker:
     python skeleton/seed_vectors.py
 
@@ -22,7 +26,7 @@ import time
 sys.path.insert(0, ".")
 
 from skeleton.llm_provider import llm
-from databases.relational.queries import store_policy_document
+from databases.relational.queries import clear_policy_documents, store_policy_document
 
 _DATA_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "train-mock-data")
@@ -87,6 +91,9 @@ def build_documents():
 def seed():
     documents = build_documents()
     print(f"📄 Embedding {len(documents)} policy documents using {llm.chat_provider}...\n")
+    removed = clear_policy_documents()
+    if removed:
+        print(f"  Cleared {removed} existing policy documents\n")
 
     for i, doc in enumerate(documents):
         print(f"  [{i+1}/{len(documents)}] Embedding: {doc['title']}")
@@ -110,6 +117,9 @@ def seed():
 
         except Exception as e:
             print(f"    ✗ Failed: {e}")
+            if "expected 768 dimensions" in str(e) or "expected 3072 dimensions" in str(e):
+                print("    Check databases/relational/schema.sql: policy_documents.embedding")
+                print("    Ollama uses vector(768); Gemini uses vector(3072). Reset the database after changing it.")
             raise
 
         if llm.chat_provider == "gemini" and i < len(documents) - 1:
