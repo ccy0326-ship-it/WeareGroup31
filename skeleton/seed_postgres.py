@@ -477,6 +477,8 @@ def seed_seat_layouts(cur):
     print(f"national_rail_seats: {n2} rows")
 
 
+from argon2 import PasswordHasher
+ph = PasswordHasher()
 def seed_users(cur):
 
     data = load("registered_users.json")
@@ -486,7 +488,7 @@ def seed_users(cur):
             u["user_id"],
             u["full_name"],
             u["email"],
-            u["password"],
+            ph.hash(u["password"]),
             u["phone"],
             u["date_of_birth"],
             u["secret_question"],
