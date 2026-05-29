@@ -68,8 +68,54 @@ def query_shortest_route(
         dict with keys: found, origin_id, destination_id,
                         total_time_min, path (list of station dicts), legs
     """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
+    with _driver() as driver:
+        with driver.session() as session:
+            result = session.run(
+                """
+                MATCH p = shortestPath(
+                    (a:Station {station_id:$origin_id})-[*]-(b:Station {station_id:$destination_id})
+                )
+                RETURN
+                    [x IN nodes(p) | {
+                        station_id: x.station_id,
+                        name: x.name,
+                        labels: labels(x),
+                        lines: x.lines
+                    }] AS path,
+                    [r IN relationships(p) | {
+                        type: type(r),
+                        line: r.line,
+                        travel_time_min: coalesce(r.travel_time_min, 0)
+                    }] AS legs,
+                    reduce(total = 0,
+                        r IN relationships(p) |
+                        total + coalesce(r.travel_time_min, 0)
+                    ) AS total_time_min
+                """,
+                origin_id=origin_id,
+                destination_id=destination_id
+            )
 
+            record = result.single()
+
+            if not record:
+                return {
+                    "found": False,
+                    "origin_id": origin_id,
+                    "destination_id": destination_id,
+                    "total_time_min": None,
+                    "path": [],
+                    "legs": []
+                }
+
+            return {
+                "found": True,
+                "origin_id": origin_id,
+                "destination_id": destination_id,
+                "total_time_min": record["total_time_min"],
+                "path": record["path"],
+                "legs": record["legs"]
+            }
 
 # ── CHEAPEST ROUTE (Dijkstra by fare) ────────────────────────────────────────
 
@@ -91,7 +137,72 @@ def query_cheapest_route(
     Returns:
         dict with found, total_fare_usd (approximate), stations, legs
     """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
+    with _driver() as driver:
+        with driver.session() as session:
+            result = session.run(
+                """
+                MATCH p = (a:Station {station_id:$origin_id})-[*1..10]-(b:Station {station_id:$destination_id})
+                WITH p,
+                     reduce(total = 0.0,
+                         r IN relationships(p) |
+                         total +
+                         CASE
+                             WHEN type(r) = 'METRO_LINK' THEN 1.50
+                             WHEN type(r) = 'RAIL_LINK' AND $fare_class = 'first' THEN coalesce(r.travel_time_min, 0) * 0.45
+                             WHEN type(r) = 'RAIL_LINK' THEN coalesce(r.travel_time_min, 0) * 0.30
+                             WHEN type(r) = 'INTERCHANGE' THEN 0.00
+                             ELSE 0.00
+                         END
+                     ) AS total_fare_usd,
+                     reduce(total = 0,
+                         r IN relationships(p) |
+                         total + coalesce(r.travel_time_min, 0)
+                     ) AS total_time_min
+                RETURN
+                    [x IN nodes(p) | {
+                        station_id: x.station_id,
+                        name: x.name,
+                        labels: labels(x),
+                        lines: x.lines
+                    }] AS stations,
+                    [r IN relationships(p) | {
+                        type: type(r),
+                        line: r.line,
+                        travel_time_min: coalesce(r.travel_time_min, 0)
+                    }] AS legs,
+                    total_fare_usd,
+                    total_time_min
+                ORDER BY total_fare_usd ASC, total_time_min ASC
+                LIMIT 1
+                """,
+                origin_id=origin_id,
+                destination_id=destination_id,
+                fare_class=fare_class
+            )
+
+            record = result.single()
+
+            if not record:
+                return {
+                    "found": False,
+                    "origin_id": origin_id,
+                    "destination_id": destination_id,
+                    "total_fare_usd": None,
+                    "total_time_min": None,
+                    "stations": [],
+                    "legs": []
+                }
+
+            return {
+                "found": True,
+                "origin_id": origin_id,
+                "destination_id": destination_id,
+                "fare_class": fare_class,
+                "total_fare_usd": round(record["total_fare_usd"], 2),
+                "total_time_min": record["total_time_min"],
+                "stations": record["stations"],
+                "legs": record["legs"]
+            }
 
 
 # ── ALTERNATIVE ROUTES (avoiding a station) ───────────────────────────────────
@@ -117,7 +228,51 @@ def query_alternative_routes(
     Returns:
         List of routes, each route is a list of leg dicts
     """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
+    with _driver() as driver:
+        with driver.session() as session:
+            result = session.run(
+                """
+                MATCH p = (a:Station {station_id:$origin_id})-[*1..10]-(b:Station {station_id:$destination_id})
+                WHERE NONE(x IN nodes(p) WHERE x.station_id = $avoid_station_id)
+                WITH p,
+                     reduce(total = 0,
+                         r IN relationships(p) |
+                         total + coalesce(r.travel_time_min, 0)
+                     ) AS total_time_min
+                RETURN
+                    [x IN nodes(p) | {
+                        station_id: x.station_id,
+                        name: x.name,
+                        labels: labels(x),
+                        lines: x.lines
+                    }] AS stations,
+                    [r IN relationships(p) | {
+                        type: type(r),
+                        line: r.line,
+                        travel_time_min: coalesce(r.travel_time_min, 0)
+                    }] AS legs,
+                    total_time_min
+                ORDER BY total_time_min ASC
+                LIMIT $max_routes
+                """,
+                origin_id=origin_id,
+                destination_id=destination_id,
+                avoid_station_id=avoid_station_id,
+                max_routes=max_routes
+            )
+
+            return [
+                {
+                    "found": True,
+                    "origin_id": origin_id,
+                    "destination_id": destination_id,
+                    "avoid_station_id": avoid_station_id,
+                    "total_time_min": record["total_time_min"],
+                    "stations": record["stations"],
+                    "legs": record["legs"]
+                }
+                for record in result
+            ]
 
 
 # ── CROSS-NETWORK INTERCHANGE PATH ───────────────────────────────────────────
