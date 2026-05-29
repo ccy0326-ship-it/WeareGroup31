@@ -336,6 +336,31 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
     Find all stations within N hops of a delayed or disrupted station.
     Works on both metro and national rail networks.
     """
+    if hops == 0:
+        with _driver() as driver:
+            with driver.session() as session:
+                result = session.run(
+                    """
+                    MATCH (s:Station {station_id:$delayed_station_id})
+                    RETURN
+                        s.station_id AS station_id,
+                        s.name AS name,
+                        0 AS hops_away,
+                        s.lines AS lines_affected
+                    """,
+                    delayed_station_id=delayed_station_id,
+                )
+
+                return [
+                    {
+                        "station_id": record["station_id"],
+                        "name": record["name"],
+                        "hops_away": record["hops_away"],
+                        "lines_affected": record["lines_affected"],
+                    }
+                    for record in result
+                ]
+
     with _driver() as driver:
         with driver.session() as session:
             result = session.run(
@@ -372,9 +397,9 @@ def query_station_connections(station_id: str) -> list[dict]:
 
             result = session.run(
                 """
-                MATCH (s:Station {station_id:$station_id})-[r]->(connected:Station)
+                MATCH (s:Station {station_id:$station_id})-[r]-(connected:Station)
 
-                RETURN
+                RETURN DISTINCT
                     connected.station_id AS station_id,
                     connected.name AS name,
                     type(r) AS connection_type,
