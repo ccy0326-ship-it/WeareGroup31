@@ -519,6 +519,21 @@ def execute_booking(
             booking_id = _gen_booking_id()
             payment_id = _gen_payment_id()
 
+            # Get actual departure time from schedule
+            cur.execute("""
+            SELECT first_train_time
+            FROM national_rail_schedules
+            WHERE schedule_id = %s
+            """, (schedule_id,))
+
+            schedule_row = cur.fetchone()
+
+            if not schedule_row:
+                conn.rollback()
+                return (False, "Schedule not found")
+
+            departure_time = schedule_row["first_train_time"]
+            
             # Calculate fare
             stops_travelled = calculate_stops_travelled(
                 schedule_id,
@@ -572,7 +587,7 @@ def execute_booking(
                 origin_station_id,
                 destination_station_id,
                 travel_date,
-                "09:00",
+                departure_time,
                 ticket_type,
                 fare_class,
                 seat_id,
@@ -661,7 +676,32 @@ def execute_cancellation(booking_id: str, user_id: str) -> tuple[bool, dict | st
                 conn.rollback()
                 return (False, "Booking already cancelled")
 
-            refund_amount = float(booking["amount_usd"]) * 0.8
+            from datetime import datetime
+
+            departure_datetime = datetime.combine(
+                booking["travel_date"],
+                booking["departure_time"]
+            )
+
+            hours_before_departure = (
+                departure_datetime - datetime.utcnow()
+            ).total_seconds() / 3600
+
+            amount_usd = float(booking["amount_usd"])
+
+            if hours_before_departure >= 48:
+                refund_amount = amount_usd
+
+            elif hours_before_departure >= 24:
+                refund_amount = amount_usd * 0.75 - 0.50
+
+            elif hours_before_departure >= 2:
+                refund_amount = amount_usd * 0.50 - 0.50
+
+            else:
+                refund_amount = 0.0
+
+            refund_amount = max(0.0, round(refund_amount, 2))
 
             # Update booking status to cancelled
             cur.execute("""
