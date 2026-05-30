@@ -869,7 +869,7 @@ JSON:"""
 
     # 3. Personal booking history — requires login
     if current_user_email and not tool_calls:
-        _personal_triggers = {"my booking", "my ticket", "my trip", "my journey", "my history",
+        _personal_triggers = {"my booking","refund", "cancel", "late", "money back", "my ticket", "my trip", "my journey", "my history",
                                "my reservation", "show booking", "view booking", "check booking",
                                "list booking", "show my", "view my"}
         if any(kw in _lower for kw in _personal_triggers):
