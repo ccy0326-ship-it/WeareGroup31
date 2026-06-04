@@ -455,6 +455,10 @@ Database seeding order had to be carefully managed.
 
 Representing interchange stations accurately required additional design effort.
 
+### Vector Database Integration
+
+Matching embedding dimensions between the Ollama embedding model and the pgvector database schema required careful validation. Several retrieval tests were performed to ensure semantic search quality and consistency.
+
 ---
 
 ## 6.3 Future Improvements
@@ -466,6 +470,9 @@ Potential future enhancements include:
 - Live train occupancy estimation
 - Additional policy document coverage
 - Mobile application integration
+- Hybrid retrieval combining keyword search and vector similarity search
+- Larger policy document collections for improved RAG performance
+- Policy document version tracking and update management
 
 ---
 
