@@ -176,20 +176,25 @@ The TransitFlow relational database satisfies:
 The final design improves data consistency, reduces redundancy, and supports efficient maintenance of the transportation system.
 
 ---
-
 # 3. Graph Database Design Rationale
 
-TransitFlow uses Neo4j to model transportation networks.
+TransitFlow uses Neo4j as the graph database component for route planning and transportation network analysis.
 
-Graph databases are well suited for route-finding because transportation systems naturally form connected networks.
+Transportation systems are naturally represented as graphs, where stations can be modelled as nodes and connections between stations can be represented as relationships. Compared with relational databases, graph databases provide a more intuitive structure for route-finding and network traversal tasks. Neo4j allows efficient exploration of connected stations without requiring complex multi-table joins.
+
+The graph database component was mainly designed to support route discovery, shortest-path analysis, fare-based route calculation, interchange path search, and disruption impact analysis across metro and national rail systems.
 
 ---
 
 ## 3.1 Node Types
 
+Two primary station node types are used in the graph model.
+
 ### MetroStation
 
-Stores:
+Represents stations in the metro network.
+
+Properties:
 
 - station_id
 - name
@@ -197,28 +202,32 @@ Stores:
 
 ### RailStation
 
-Stores:
+Represents stations in the national rail network.
+
+Properties:
 
 - station_id
 - name
 - lines
 - interchange information
 
+Both `MetroStation` and `RailStation` also share the general `Station` label so that route queries can search across the whole transport network more easily.
+
 ---
 
 ## 3.2 Relationship Types
 
+Relationships represent direct connections between stations and store operational information such as travel time and fare.
+
 ### METRO_LINK
 
-Represents a direct metro connection between two stations.
+Represents a direct metro connection between two metro stations.
 
 Properties:
 
 - line
 - travel_time_min
 - fare_usd
-
----
 
 ### RAIL_LINK
 
@@ -232,8 +241,6 @@ Properties:
 - fare_standard_usd
 - fare_first_usd
 
----
-
 ### RAIL_EXPRESS_LINK
 
 Represents express rail services.
@@ -242,11 +249,10 @@ Properties:
 
 - schedule_id
 - line
+- service_type
 - travel_time_min
 - fare_standard_usd
 - fare_first_usd
-
----
 
 ### INTERCHANGE
 
@@ -257,18 +263,56 @@ Properties:
 - travel_time_min
 - fare_usd
 
+This relationship enables multi-network route planning and allows users to transfer between metro and rail stations.
+
 ---
 
-## 3.3 Graph Query Advantages
+## 3.3 Graph Data Seeding
 
-Neo4j allows efficient execution of:
+The graph database is populated using `skeleton/seed_neo4j.py`.
 
-- Route discovery
-- Shortest-path calculations
-- Interchange analysis
-- Express service optimisation
+Station data is loaded from the metro and national rail JSON datasets and converted into Neo4j nodes. Connection data is then transformed into graph relationships, including metro links, rail links, express rail links, and interchange links.
 
-Compared with relational joins, graph traversal significantly simplifies route-planning logic.
+This seeding approach keeps the graph database consistent with the source data and allows the graph to be regenerated when the mock data changes.
+
+---
+
+## 3.4 Graph Query Implementation
+
+The Neo4j query functions are implemented in `databases/graph/queries.py`.
+
+The implemented graph functions include:
+
+- `query_shortest_route()`
+- `query_cheapest_route()`
+- `query_alternative_routes()`
+- `query_interchange_path()`
+- `query_delay_ripple()`
+- `query_station_connections()`
+
+These functions use graph traversal and relationship properties to support different route-planning needs.
+
+For example:
+
+- `query_shortest_route()` uses `travel_time_min` to find a route with lower total travel time.
+- `query_cheapest_route()` uses fare properties such as `fare_usd`, `fare_standard_usd`, and `fare_first_usd`.
+- `query_alternative_routes()` finds a route while avoiding a specified station.
+- `query_interchange_path()` identifies paths involving metro and national rail transfer points.
+- `query_delay_ripple()` finds stations affected by a disruption within a given number of hops.
+
+---
+
+## 3.5 Graph Query Advantages
+
+Using Neo4j provides several advantages for transportation route planning:
+
+- It naturally represents transportation networks as stations and connections.
+- It simplifies route traversal compared with multiple relational joins.
+- It supports weighted route calculations using travel time or fare.
+- It allows metro and national rail systems to be connected through interchange relationships.
+- It makes future extensions easier, such as adding more transport modes or disruption analysis.
+
+Overall, the graph database is used as the main component for network-based route analysis in TransitFlow.
 
 ---
 
