@@ -312,7 +312,7 @@ Using Neo4j provides several advantages for transportation route planning:
 - It allows metro and national rail systems to be connected through interchange relationships.
 - It makes future extensions easier, such as adding more transport modes or disruption analysis.
 
-Overall, the graph database is used as the main component for network-based route analysis in TransitFlow.
+Overall, the graph database complements the relational database by providing efficient route analysis and network traversal capabilities within TransitFlow.
 
 ---
 
