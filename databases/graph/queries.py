@@ -249,25 +249,38 @@ def query_interchange_path(origin_id: str, destination_id: str) -> dict:
 
 def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
     """Find all stations within N hops of a delayed or disrupted station."""
-    hops = max(1, min(int(hops), 6))
+    hops = max(0, min(int(hops), 6))
 
     with _driver() as driver:
         with driver.session() as session:
-            result = session.run(
-                f"""
-                MATCH (start:Station {{station_id:$delayed_station_id}})
-                MATCH p = (start)-[*1..{hops}]-(affected:Station)
-                WHERE affected.station_id <> $delayed_station_id
-                WITH affected, min(length(p)) AS hops_away
-                RETURN
-                    affected.station_id AS station_id,
-                    affected.name AS name,
-                    hops_away,
-                    affected.lines AS lines_affected
-                ORDER BY hops_away, station_id
-                """,
-                delayed_station_id=delayed_station_id,
-            )
+            if hops == 0:
+                result = session.run(
+                    """
+                    MATCH (start:Station {station_id:$delayed_station_id})
+                    RETURN
+                        start.station_id AS station_id,
+                        start.name AS name,
+                        0 AS hops_away,
+                        start.lines AS lines_affected
+                    """,
+                    delayed_station_id=delayed_station_id,
+                )
+            else:
+                result = session.run(
+                    f"""
+                    MATCH (start:Station {{station_id:$delayed_station_id}})
+                    MATCH p = (start)-[*1..{hops}]-(affected:Station)
+                    WHERE affected.station_id <> $delayed_station_id
+                    WITH affected, min(length(p)) AS hops_away
+                    RETURN
+                        affected.station_id AS station_id,
+                        affected.name AS name,
+                        hops_away,
+                        affected.lines AS lines_affected
+                    ORDER BY hops_away, station_id
+                    """,
+                    delayed_station_id=delayed_station_id,
+                )
 
             return [
                 {
