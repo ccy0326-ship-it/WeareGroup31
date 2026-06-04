@@ -382,34 +382,44 @@ This approach improves factual accuracy and reduces hallucinations.
 
 # 5. AI Tool Usage Evidence
 
-Generative AI tools were used throughout the project development process.
-
-Tools used:
-
-- ChatGPT
-- Gemini
+Generative AI tools, including ChatGPT and Gemini, were used as development assistants during the project. The tools were used for brainstorming, debugging, and documentation support, but all final code and design decisions were reviewed and tested by team members before submission.
 
 ---
 
 ## 5.1 Development Support
 
-AI tools assisted with:
+AI tools assisted with several parts of the development process:
 
-- SQL debugging
-- PostgreSQL schema review
-- Neo4j Cypher query optimisation
-- Python implementation guidance
-- Documentation drafting
+- Debugging PostgreSQL queries and checking whether SQL logic matched the relational schema.
+- Reviewing PostgreSQL schema design and normalisation explanations.
+- Debugging Neo4j Cypher queries for route traversal, interchange paths, and delay ripple analysis.
+- Understanding how to model transportation networks using graph nodes and relationships.
+- Improving Python implementation logic for database query functions.
+- Checking how to structure pgvector-based policy retrieval.
+- Drafting and improving sections of the design document.
+
+For example, AI tools were used to help reason about how route-planning queries should handle travel time, fare properties, interchange relationships, express rail links, and station avoidance logic.
 
 ---
 
-## 5.2 Human Verification
+## 5.2 Examples of AI-Assisted Tasks
 
-All AI-generated outputs were:
+Examples of AI-assisted development tasks included:
 
-- Reviewed by team members
-- Modified when necessary
-- Tested before integration
+- Asking how to represent metro and national rail stations in Neo4j.
+- Asking how to calculate route costs using relationship properties such as `travel_time_min`, `fare_usd`, `fare_standard_usd`, and `fare_first_usd`.
+- Debugging why a cheapest-route query returned incorrect fare values before re-seeding the Neo4j database.
+- Checking how delay ripple analysis should behave when `hops = 0`.
+- Improving the explanation of the graph database design in the design document.
+- Reviewing how pgvector can retrieve policy documents for refund, booking, ticket, and travel policy questions.
+
+---
+
+## 5.3 Human Verification
+
+All AI-generated suggestions were reviewed before being used.
+
+The team did not directly copy AI-generated outputs without checking them. Code suggestions were tested through Python function calls, database queries, and the TransitFlow interface before being considered complete. Documentation suggestions were also modified to match the actual implementation of our project.
 
 Final responsibility for all submitted work remains with the team.
 
