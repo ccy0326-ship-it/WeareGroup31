@@ -63,6 +63,13 @@ The schema contains the following major entities:
 
 These entities collectively support route planning, ticket booking, travel tracking, and customer service functions.
 
+### Password Security
+
+User passwords are hashed using Argon2 before storage.
+
+Argon2 is a memory-hard password hashing algorithm that protects against brute-force attacks and rainbow-table attacks. Unlike MD5 or SHA-based hashing, Argon2 intentionally increases computational cost and automatically incorporates salting, making it significantly more secure for credential storage.
+
+The `registered_users` table stores only the Argon2 hash rather than the user's original password, ensuring that plaintext credentials are never stored in the database.
 ---
 
 ## 2. Normalisation Justification
