@@ -369,13 +369,14 @@ Contains travel conduct and operational policies.
 
 The retrieval process follows these steps:
 
-1. User submits a question.
-2. The query is converted into an embedding vector.
-3. pgvector performs similarity search.
-4. Relevant policy documents are retrieved.
-5. Retrieved content is supplied to the LLM.
-6. The LLM generates the final response.
-
+1. User submits a policy-related question.
+2. Ollama nomic-embed-text converts the question into a 768-dimensional embedding vector.
+3. PostgreSQL pgvector performs cosine similarity search against policy_documents.
+4. The top-k most relevant policy documents are retrieved.
+5. Retrieved policy snippets are injected into the LLM prompt as context.
+6. The LLM generates a response grounded on the retrieved policies.
+7. The final answer is returned to the user through the Gradio interface.
+   
 This approach improves factual accuracy and reduces hallucinations.
 
 ---
@@ -481,9 +482,11 @@ The following functionality was added:
 Added:
 
 - policy_documents table
-- vector embeddings
-- similarity search capability
-
+- pgvector extension support
+- semantic similarity search using cosine distance
+- Ollama embedding integration
+- Retrieval-Augmented Generation (RAG) workflow
+  
 ### Document Embedding Pipeline
 
 Implemented:
@@ -536,6 +539,9 @@ Example questions:
 
 - Can I get a refund if my train is delayed?
 - What ticket types are available?
+- Can I refund my metro day pass?
+- What is the cancellation policy for a metro ticket?
+- Can I get compensation if my train is delayed?
 
 Results successfully retrieved relevant policy documents.
 
