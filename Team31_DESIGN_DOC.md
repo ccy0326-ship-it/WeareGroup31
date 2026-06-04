@@ -62,14 +62,6 @@ The schema contains the following major entities:
 - national_rail_seats
 
 These entities collectively support route planning, ticket booking, travel tracking, and customer service functions.
-
-### Password Security
-
-User passwords are hashed using Argon2 before storage.
-
-Argon2 is a memory-hard password hashing algorithm that protects against brute-force attacks and rainbow-table attacks. Unlike MD5 or SHA-based hashing, Argon2 intentionally increases computational cost and automatically incorporates salting, making it significantly more secure for credential storage.
-
-The `registered_users` table stores only the Argon2 hash rather than the user's original password, ensuring that plaintext credentials are never stored in the database.
 ---
 
 ## 2. Normalisation Justification
@@ -164,6 +156,14 @@ Rail network connectivity is represented in a separate relationship table.
 This prevents station records from containing duplicated adjacency information.
 
 By separating these relationships into dedicated tables, the schema avoids transitive dependencies and reduces data redundancy.
+
+### 2.4 Password Security
+
+User passwords are hashed using Argon2 before storage.
+
+Argon2 is a memory-hard password hashing algorithm that protects against brute-force attacks and rainbow-table attacks. Unlike MD5 or SHA-based hashing, Argon2 intentionally increases computational cost and automatically incorporates salting, making it significantly more secure for credential storage.
+
+The password hashing process is implemented in the authentication functions and ensures that plaintext passwords are never stored in the database.
 
 ### Summary
 
