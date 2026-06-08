@@ -479,6 +479,10 @@ We chose Neo4j for route planning because transportation networks are naturally 
 
 This design makes route queries easier to express. For example, shortest-route, alternative-route, interchange-path, and delay-ripple queries can traverse relationships directly instead of repeatedly joining connection tables. The trade-off is that the same transportation data must be seeded and maintained separately in Neo4j, which increases integration complexity.
 
+### Vector Database Integration
+
+Matching embedding dimensions between the Ollama embedding model and the pgvector database schema required careful validation. Several retrieval tests were performed to ensure semantic search quality and consistency.
+
 ---
 
 ## 6.3 Design Decision 3 — Using pgvector for policy retrieval
@@ -486,6 +490,14 @@ This design makes route queries easier to express. For example, shortest-route, 
 We used PostgreSQL pgvector to support Retrieval-Augmented Generation for policy-related questions. Policy documents such as refund rules, booking rules, ticket types, and travel policies are embedded into vectors, allowing the system to retrieve semantically relevant documents before generating an answer.
 
 The advantage is that the assistant can provide more grounded responses instead of relying only on the LLM. The trade-off is that embeddings must be regenerated if the embedding model or dimension changes, and policy retrieval quality depends on the quality of the embedded documents.
+- Real-time delay information
+- Dynamic fare calculation
+- Live train occupancy estimation
+- Additional policy document coverage
+- Mobile application integration
+- Hybrid retrieval combining keyword search and vector similarity search
+- Larger policy document collections for improved RAG performance
+- Policy document version tracking and update management
 
 ---
 
