@@ -383,91 +383,118 @@ This approach improves factual accuracy and reduces hallucinations.
 
 # 5. AI Tool Usage Evidence
 
-Generative AI tools, including ChatGPT and Gemini, were used as development assistants during the project. The tools were used for brainstorming, debugging, and documentation support, but all final code and design decisions were reviewed and tested by team members before submission.
+Generative AI tools, including ChatGPT and Gemini, were used as development assistants during the project. AI was primarily used for debugging, implementation guidance, design discussion, and documentation support. All suggestions were reviewed and tested before being incorporated into the final system.
 
 ---
 
-## 5.1 Development Support
+## 5.1 Example 1 — Neo4j Route Query Design
 
-AI tools assisted with several parts of the development process:
+### Context
 
-- Debugging PostgreSQL queries and checking whether SQL logic matched the relational schema.
-- Reviewing PostgreSQL schema design and normalisation explanations.
-- Debugging Neo4j Cypher queries for route traversal, interchange paths, and delay ripple analysis.
-- Understanding how to model transportation networks using graph nodes and relationships.
-- Improving Python implementation logic for database query functions.
-- Checking how to structure pgvector-based policy retrieval.
-- Drafting and improving sections of the design document.
+The graph database component required route-planning functionality across metro and national rail networks. We needed to determine how stations and connections should be represented in Neo4j and how route traversal queries could be implemented efficiently.
 
-For example, AI tools were used to help reason about how route-planning queries should handle travel time, fare properties, interchange relationships, express rail links, and station avoidance logic.
+### Prompt
 
----
+"How should transportation networks be modelled in Neo4j to support shortest-route and alternative-route queries?"
 
-## 5.2 Examples of AI-Assisted Tasks
+### Outcome
 
-Examples of AI-assisted development tasks included:
-
-- Asking how to represent metro and national rail stations in Neo4j.
-- Asking how to calculate route costs using relationship properties such as `travel_time_min`, `fare_usd`, `fare_standard_usd`, and `fare_first_usd`.
-- Debugging why a cheapest-route query returned incorrect fare values before re-seeding the Neo4j database.
-- Checking how delay ripple analysis should behave when `hops = 0`.
-- Improving the explanation of the graph database design in the design document.
-- Reviewing how pgvector can retrieve policy documents for refund, booking, ticket, and travel policy questions.
+AI suggestions helped us reason about representing stations as nodes and connections as relationships. The final implementation used MetroStation, RailStation, METRO_LINK, RAIL_LINK, RAIL_EXPRESS_LINK, and INTERCHANGE relationships. The resulting graph model supported shortest-route, alternative-route, interchange-path, and delay-ripple queries.
 
 ---
 
-## 5.3 Human Verification
+## 5.2 Example 2 — Cheapest Route Debugging
 
-All AI-generated suggestions were reviewed before being used.
+### Context
 
-The team did not directly copy AI-generated outputs without checking them. Code suggestions were tested through Python function calls, database queries, and the TransitFlow interface before being considered complete. Documentation suggestions were also modified to match the actual implementation of our project.
+During development of the graph query functions, the cheapest-route calculation initially returned incorrect fare values. The issue was related to relationship properties and graph seeding.
 
-Final responsibility for all submitted work remains with the team.
+### Prompt
+
+"Why is my Neo4j cheapest-route query returning incorrect fare values even though the route itself is correct?"
+
+### Outcome
+
+AI suggestions helped identify possible causes, including missing fare properties and inconsistencies between seeded graph data and query logic. After checking relationship properties and re-seeding the Neo4j database, the query returned the expected fare calculations for both standard and first-class routes.
+
+### Human Verification
+
+Some AI suggestions were incomplete because they assumed the graph already contained fare-related properties. The team manually inspected the graph schema and verified the actual relationship data before applying any fixes.
+
+---
+
+## 5.3 Example 3 — Vector Database and RAG Design
+
+### Context
+
+The optional extension required policy-aware responses using Retrieval-Augmented Generation. We needed to understand how vector embeddings could be integrated into PostgreSQL.
+
+### Prompt
+
+"How can pgvector be used to retrieve policy documents for question answering?"
+
+### Outcome
+
+AI explanations helped us understand the workflow of embedding generation, vector storage, similarity search, and retrieval. This knowledge was used when implementing policy document retrieval using pgvector and Ollama embeddings.
+
+---
+
+## 5.4 Example 4 — Documentation Support
+
+### Context
+
+The project required a detailed design document covering relational, graph, and vector database components.
+
+### Prompt
+
+"How should a graph database design rationale be documented for a transportation route-planning system?"
+
+### Outcome
+
+AI tools provided suggestions for organising the documentation structure, including node types, relationship types, query implementation, and design trade-offs. The final document was reviewed and rewritten to accurately reflect the actual implementation of TransitFlow.
+
+---
+
+## 5.5 Responsible Use of AI
+
+AI tools were used as development assistants rather than as a replacement for implementation work. All generated suggestions were reviewed, tested, and modified by team members before inclusion in the final project.
+
+Final responsibility for the correctness of all code, database designs, and documentation remains with the project team.
 
 ---
 
 # 6. Reflection and Trade-offs
 
-## 6.1 Strengths
+## 6.1 Design Decision 1 — Using PostgreSQL for structured transactional data
 
-The final architecture provides:
+We chose PostgreSQL for structured data such as users, bookings, payments, schedules, seats, and feedback because these data require strong consistency and clear relational constraints. For example, bookings must be linked correctly to users, schedules, payments, and seat records, so foreign keys and normalised tables help maintain data integrity.
 
-- Strong data consistency through relational design
-- Efficient route-finding using Neo4j
-- Knowledge retrieval using pgvector
-- Separation of concerns across database technologies
+The trade-off is that route traversal is less natural in a relational schema. Although station connections can be stored in tables, finding multi-hop routes would require more complex SQL logic such as recursive queries. Therefore, PostgreSQL was used mainly for transactional and structured data, while Neo4j was used for network traversal.
 
 ---
 
-## 6.2 Challenges
+## 6.2 Design Decision 2 — Using Neo4j for route and network analysis
 
-Several challenges were encountered:
+We chose Neo4j for route planning because transportation networks are naturally graph-shaped. Stations can be represented as nodes, while metro links, rail links, express links, and interchange connections can be represented as relationships.
 
-### Multi-database integration
-
-Maintaining consistency across PostgreSQL, Neo4j, and pgvector required careful coordination.
-
-### Foreign key dependencies
-
-Database seeding order had to be carefully managed.
-
-### Route modelling
-
-Representing interchange stations accurately required additional design effort.
+This design makes route queries easier to express. For example, shortest-route, alternative-route, interchange-path, and delay-ripple queries can traverse relationships directly instead of repeatedly joining connection tables. The trade-off is that the same transportation data must be seeded and maintained separately in Neo4j, which increases integration complexity.
 
 ---
 
-## 6.3 Future Improvements
+## 6.3 Design Decision 3 — Using pgvector for policy retrieval
 
-Potential future enhancements include:
+We used PostgreSQL pgvector to support Retrieval-Augmented Generation for policy-related questions. Policy documents such as refund rules, booking rules, ticket types, and travel policies are embedded into vectors, allowing the system to retrieve semantically relevant documents before generating an answer.
 
-- Real-time delay information
-- Dynamic fare calculation
-- Live train occupancy estimation
-- Additional policy document coverage
-- Mobile application integration
+The advantage is that the assistant can provide more grounded responses instead of relying only on the LLM. The trade-off is that embeddings must be regenerated if the embedding model or dimension changes, and policy retrieval quality depends on the quality of the embedded documents.
 
 ---
+
+## 6.4 Production Considerations
+
+In a production system, we would improve secret management, database migration, indexing, and deployment reliability. For example, database passwords and API keys should not be stored directly in local configuration files; they should be managed through environment variables or a secure secret manager.
+
+We would also use formal schema migration tools to track database changes instead of manually re-running seed scripts. For performance, indexes should be added and monitored for frequently queried fields such as user IDs, station IDs, schedule IDs, and vector embeddings. Finally, connection pooling and better error handling would be needed to support multiple users at the same time.
+
 
 # 7. Task 6 Extension
 
